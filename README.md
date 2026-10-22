@@ -10,6 +10,8 @@
 | 基本面筛选 | 按 PE、PB、市值、换手率硬过滤，自动剔除 ST |
 | 技术面信号 | 均线多头、金叉、MACD、RSI、量比、20 日新高、布林收口，综合打分排序 |
 | 持仓管理 | 记录买卖流水，移动加权成本，浮盈 / 已实现盈亏 / 仓位占比 |
+| 操作计划 | 每日给出下一交易日每只持仓股 / 自选股的动作（卖出 / 买入 / 持有 / 观望）、挂单价、止损价、出场位与进场位 |
+| 回测 | 单票多头、次日开盘成交、A 股费用与整手约束；内置均线多头、金叉、MACD、20 日突破、综合评分五种策略，输出收益、回撤、夏普、胜率并对比买入持有 |
 | 日报 | 一条命令生成 Markdown 日报 |
 
 设计依据见 [docs/market-research.md](docs/market-research.md)。
@@ -22,7 +24,7 @@
 | 录入一笔交易 | 看板上点「录入交易」，或在仓库 [新建 Issue](https://github.com/zjxlink/stock-ops/issues/new?template=trade.yml) 填表单；也可以直接在 Issue 里写 `buy 600519 1500 100` 这样的文本，每行一笔 |
 | 看历史日报 | [reports/](reports/) 目录，每天一份 Markdown |
 | 立刻刷新 | Actions 页面手动运行 `Daily report` |
-| 改自选股和筛选阈值 | 直接在网页上编辑 [config.yaml](config.yaml) |
+| 改自选股、筛选阈值、策略、止损、仓位 | 直接在网页上编辑 [config.yaml](config.yaml) |
 
 录入交易只认仓库所有者发的 Issue，其他人提交会被忽略。流水保存在 [data/trades.csv](data/trades.csv)，可以直接编辑。
 
@@ -51,7 +53,11 @@ stock-ops trade add 600519 sell 1600 50
 stock-ops trade list
 stock-ops portfolio                   # 持仓与盈亏
 
-stock-ops report                      # 生成 reports/YYYY-MM-DD.md
+stock-ops report                      # 生成 reports/YYYY-MM-DD.md 与 site/index.html
+
+stock-ops backtest                    # 用配置的策略回测自选股和持仓股
+stock-ops backtest 600519 -s macd --trades    # 单只股票、指定策略、打印逐笔交易
+stock-ops backtest -s all             # 五种策略横向对比
 ```
 
 所有命令支持 `-c 其他配置.yaml` 和 `-v` 显示详细日志。
@@ -80,7 +86,8 @@ GitHub Actions 工作流：
 stock_ops/
   config.py            配置加载
   data/                数据源抽象、Baostock / AKShare 实现、SQLite 缓存、抓取编排
-  analysis/            指标计算、技术信号、基本面筛选
+  analysis/            指标计算、技术信号、基本面筛选、操作计划
+  backtest/            回测引擎与内置策略
   portfolio/           持仓账本
   report/              日报组装、Markdown 日报、静态 HTML 看板
   cli.py               命令行入口

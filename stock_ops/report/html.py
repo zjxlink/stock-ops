@@ -27,7 +27,7 @@ a{color:var(--accent)}.sub{color:var(--muted);font-size:13px}.tiles{display:grid
 .tile{background:var(--surface);border:1px solid var(--grid);border-radius:10px;padding:12px 14px}.tile .k{color:var(--muted);font-size:12px}
 .tile .v{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}.up{color:var(--up)}.down{color:var(--down)}
 .wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--grid);border-radius:10px}
-table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;white-space:nowrap}th,td{padding:8px 10px;border-bottom:1px solid var(--grid);text-align:right}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;white-space:nowrap}td.wrap-text{white-space:normal;min-width:260px;text-align:left}th,td{padding:8px 10px;border-bottom:1px solid var(--grid);text-align:right}
 th:first-child,td:first-child,th.l,td.l{text-align:left}th{color:var(--ink2);font-weight:500;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--surface)}
 th.sorted::after{content:" ▾";color:var(--muted)}th.asc::after{content:" ▴"}tr:last-child td{border-bottom:0}
 .empty{color:var(--muted);padding:14px}svg.spark{display:block}.ok{color:var(--accent)}.dim{color:var(--muted)}
@@ -59,6 +59,9 @@ def _fmt(v, kind: str = "num") -> str:
         return f'<span class="{cls}">{v:+,.0f}</span>'
     if kind == "yi":
         return f"{v / 1e8:,.0f}"
+    if kind == "action":
+        cls = {"卖出": "down", "买入": "up", "持有": "ok", "观望": "dim"}.get(str(v), "")
+        return f'<strong class="{cls}">{html.escape(str(v))}</strong>'
     if kind == "bool":
         return '<span class="ok">✓</span>' if v else '<span class="dim">·</span>'
     if kind == "int":
@@ -92,6 +95,8 @@ def _table(
                 else (v if isinstance(v, (int, float)) else "")
             )
             cls = ' class="l"' if f == "text" else ""
+            if c == "reason":
+                cls = ' class="wrap-text"'
             cells.append(f'<td{cls} data-v="{raw}">{_fmt(v, "text" if f == "text" else f)}</td>')
         body.append("<tr>" + "".join(cells) + "</tr>")
     return f'<div class="wrap"><table data-sortable><thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
@@ -204,6 +209,52 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
         max_rows=150,
     )
 
+    # 操作计划
+    plan_html, plan_note = "", ""
+    if rd.plan is not None and not rd.plan.empty:
+        plan_note = f'<p class="sub">{html.escape(rd.plan_note)}</p>'
+        plan_html = _table(
+            rd.plan,
+            [
+                ("code", "代码", "text"),
+                ("name", "名称", "text"),
+                ("status", "状态", "text"),
+                ("action", "动作", "action"),
+                ("order_price", "挂单价", "num"),
+                ("shares", "股数", "int"),
+                ("stop_price", "止损价", "num"),
+                ("exit_level", "出场位", "num"),
+                ("entry_level", "进场位", "num"),
+                ("reason", "说明", "text"),
+            ],
+        )
+    # 回测
+    bt_html, bt_note = "", ""
+    if rd.backtest is not None and not rd.backtest.empty:
+        bt = rd.backtest.copy()
+        curves = rd.equity_curves or {}
+        bt["_spark"] = [
+            sparkline(curves.get(c, []), w=120, h=28) if c in curves else "" for c in bt["code"]
+        ]
+        bt_note = f'<p class="sub">{html.escape(rd.backtest_note)}。总收益与买入持有对比，均为历史回测，不代表未来。</p>'
+        bt_html = _table(
+            bt,
+            [
+                ("code", "代码", "text"),
+                ("name", "名称", "text"),
+                ("_spark", "权益曲线", "spark"),
+                ("total_return", "总收益%", "pct"),
+                ("buy_hold", "买入持有%", "pct"),
+                ("excess", "超额%", "pct"),
+                ("cagr", "年化%", "num"),
+                ("max_drawdown", "最大回撤%", "num"),
+                ("sharpe", "夏普", "num"),
+                ("trades", "交易次数", "int"),
+                ("win_rate", "胜率%", "num"),
+                ("profit_factor", "盈亏比", "num"),
+                ("avg_days", "平均持有天", "num"),
+            ],
+        )
     gen = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M")
     issue_url = f"https://github.com/{repo}/issues/new?template=trade.yml&title=%E5%BD%95%E5%85%A5%E4%BA%A4%E6%98%93"
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -211,9 +262,11 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
 <h1>stock-ops 看板 <span class="sub">{html.escape(rd.date)}</span></h1>
 <p class="sub">现价：{html.escape(rd.price_note)} · 快照更新：{html.escape(rd.snapshot_updated_at or "无")} · 页面生成：{gen} · <a href="https://github.com/{repo}/tree/main/reports">日报归档</a></p>
 <p><a class="btn" href="{issue_url}">录入交易</a> <span class="sub">通过 GitHub Issue 提交，几分钟后自动写入流水并刷新本页。</span></p>
+{"<h2>下一交易日操作计划</h2>" + plan_note + plan_html if plan_html else ""}
 <h2>持仓</h2>{tiles}{pf_html}
 <h2>自选股与持仓股技术信号</h2>{sig_html}
 <h2>基本面筛选</h2>{scr_note}{scr_html}
+{"<h2>策略回测</h2>" + bt_note + bt_html if bt_html else ""}
 <footer>数据来源：Baostock、腾讯行情、东方财富。仅供个人研究，不构成投资建议。</footer>
 </main><script>{_JS}</script></body></html>"""
 

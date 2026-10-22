@@ -25,9 +25,37 @@ def _table(df: pd.DataFrame, cols: list[str], max_rows: int = 30) -> str:
 
 
 def daily_report(
-    date: str, portfolio: pd.DataFrame, signals: pd.DataFrame, screened: pd.DataFrame
+    date: str,
+    portfolio: pd.DataFrame,
+    signals: pd.DataFrame,
+    screened: pd.DataFrame,
+    backtest: pd.DataFrame | None = None,
+    backtest_note: str = "",
+    plan: pd.DataFrame | None = None,
+    plan_note: str = "",
 ) -> str:
     parts = [f"# 每日报告 {date}\n"]
+    if plan is not None and not plan.empty:
+        parts.append("## 下一交易日操作计划\n")
+        parts.append(plan_note + "\n")
+        parts.append(
+            _table(
+                plan,
+                [
+                    "code",
+                    "name",
+                    "status",
+                    "action",
+                    "order_price",
+                    "shares",
+                    "stop_price",
+                    "exit_level",
+                    "entry_level",
+                    "reason",
+                ],
+            )
+        )
+        parts.append("")
     parts.append("## 持仓\n")
     if portfolio is not None and not portfolio.empty:
         total_mv = portfolio["market_value"].sum(skipna=True)
@@ -81,4 +109,26 @@ def daily_report(
     parts.append(
         _table(screened, ["code", "name", "price", "pe_ttm", "pb", "total_mv", "turnover"])
     )
+    if backtest is not None and not backtest.empty:
+        parts.append("\n## 策略回测\n")
+        parts.append(backtest_note + "\n")
+        parts.append(
+            _table(
+                backtest,
+                [
+                    "code",
+                    "name",
+                    "total_return",
+                    "buy_hold",
+                    "excess",
+                    "cagr",
+                    "max_drawdown",
+                    "sharpe",
+                    "trades",
+                    "win_rate",
+                    "profit_factor",
+                    "avg_days",
+                ],
+            )
+        )
     return "\n".join(parts)

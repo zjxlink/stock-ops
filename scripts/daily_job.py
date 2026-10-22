@@ -71,7 +71,9 @@ def main() -> int:
     rd = build_report(cfg, cache, today)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    text = daily_report(rd.date, rd.portfolio, rd.signals, rd.screened)
+    text = daily_report(
+        rd.date, rd.portfolio, rd.signals, rd.screened, rd.backtest, rd.backtest_note
+    )
     (out / f"{today}.md").write_text(text, encoding="utf-8")
     (out / "latest.md").write_text(text, encoding="utf-8")
     log.info("日报已写入 %s", out / f"{today}.md")

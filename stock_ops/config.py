@@ -36,6 +36,18 @@ DEFAULTS: dict[str, Any] = {
         },
     },
     "portfolio": {"trades_path": "data/trades.csv"},
+    "plan": {"capital": 100000, "position_pct": 0.2},
+    "backtest": {
+        "strategy": "ma_bull",
+        "start": "2019-01-01",
+        "initial_cash": 100000,
+        "commission": 0.0003,
+        "min_commission": 5,
+        "stamp_duty": 0.0005,
+        "slippage": 0.001,
+        "stop_loss": 0.08,
+        "take_profit": None,
+    },
     "watchlist": [],
 }
 
@@ -80,6 +92,8 @@ class Config:
                     raw = _deep_merge(DEFAULTS, yaml.safe_load(f) or {})
                 raw["screen"] = _coerce_numbers(raw["screen"])
                 raw["data"] = _coerce_numbers(raw["data"])
+                raw["backtest"] = _coerce_numbers(raw.get("backtest", {}))
+                raw["plan"] = _coerce_numbers(raw.get("plan", {}))
                 break
         return cls(raw=raw, root=root)
 
@@ -104,6 +118,28 @@ class Config:
     @property
     def technical(self) -> dict[str, Any]:
         return self.raw["screen"]["technical"]
+
+    @property
+    def plan(self) -> dict[str, Any]:
+        return self.raw["plan"]
+
+    @property
+    def backtest(self) -> dict[str, Any]:
+        return self.raw["backtest"]
+
+    def backtest_config(self):
+        from .backtest import BacktestConfig
+
+        b = self.backtest
+        return BacktestConfig(
+            initial_cash=float(b["initial_cash"]),
+            commission=float(b["commission"]),
+            min_commission=float(b["min_commission"]),
+            stamp_duty=float(b["stamp_duty"]),
+            slippage=float(b["slippage"]),
+            stop_loss=b.get("stop_loss") or None,
+            take_profit=b.get("take_profit") or None,
+        )
 
     @property
     def watchlist(self) -> list[str]:

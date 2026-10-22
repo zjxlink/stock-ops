@@ -14,6 +14,7 @@ from rich.table import Table
 
 from .analysis import fundamental_screen, technical_signals
 from .analysis.technical import rank_signals
+from .backtest import STRATEGIES, get_strategy, run_many
 from .config import Config
 from .data import Cache, Fetcher, normalize_code
 from .data.fetch import build_providers
@@ -222,12 +223,75 @@ def report(
     today = date.today().isoformat()
     rd = build_report(cfg, cache, today)
     out.mkdir(parents=True, exist_ok=True)
-    text = daily_report(rd.date, rd.portfolio, rd.signals, rd.screened)
+    text = daily_report(
+        rd.date, rd.portfolio, rd.signals, rd.screened, rd.backtest, rd.backtest_note
+    )
     (out / f"{today}.md").write_text(text, encoding="utf-8")
     (out / "latest.md").write_text(text, encoding="utf-8")
     from .report.html import write_site
 
     rprint(f"已写入 {out / f'{today}.md'} 与 {write_site(rd, cache, cfg, out.parent / 'site')}")
+
+
+@app.command()
+def backtest(
+    codes: list[str] = typer.Argument(None, help="股票代码，留空则用自选股和持仓股"),
+    strategy: str | None = typer.Option(
+        None, "--strategy", "-s", help="策略名，留空用配置；all 则逐策略对比"
+    ),
+    start: str | None = typer.Option(None, help="起始日期，默认取配置"),
+    stop_loss: float | None = typer.Option(None, help="止损比例，如 0.08；0 表示关闭"),
+    trades: bool = typer.Option(False, "--trades", help="打印逐笔交易（仅单只股票）"),
+    config: str | None = typer.Option(None, "--config", "-c"),
+):
+    """基于本地缓存回测技术策略。"""
+    cfg, cache = _ctx(config)
+    targets = (
+        [normalize_code(c) for c in codes]
+        if codes
+        else sorted(set(cfg.watchlist) | set(TradeBook(cfg.trades_path).codes()))
+    )
+    start = start or str(cfg.backtest["start"])
+    bcfg = cfg.backtest_config()
+    if stop_loss is not None:
+        bcfg.stop_loss = stop_loss or None
+    data = {c: cache.daily(c, start=start) for c in targets}
+    names = [
+        "code",
+        "total_return",
+        "buy_hold",
+        "excess",
+        "cagr",
+        "max_drawdown",
+        "sharpe",
+        "trades",
+        "win_rate",
+        "profit_factor",
+        "avg_days",
+        "exposure",
+    ]
+    if strategy == "all":
+        rows = []
+        for name, strat in STRATEGIES.items():
+            table, _ = run_many(data, strat, bcfg)
+            if not table.empty:
+                avg = table[table["code"] == "平均"].iloc[0].to_dict()
+                rows.append({"strategy": name, **{k: avg[k] for k in names if k != "code"}})
+        import pandas as pd
+
+        _print_df(
+            pd.DataFrame(rows), f"各策略在 {len(data)} 只股票上的平均表现", ["strategy", *names[1:]]
+        )
+        return
+    strat = get_strategy(strategy or cfg.backtest["strategy"])
+    table, results = run_many(data, strat, bcfg)
+    rprint(f"[bold]{strat.name}[/]：{strat.description}；{start} 起；止损 {bcfg.stop_loss or '无'}")
+    _print_df(table, "回测结果", names)
+    if trades and len(results) == 1:
+        import pandas as pd
+
+        r = next(iter(results.values()))
+        _print_df(pd.DataFrame([t.__dict__ for t in r.trades]), "逐笔交易", max_rows=500)
 
 
 if __name__ == "__main__":
