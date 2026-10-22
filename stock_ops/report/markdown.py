@@ -39,7 +39,16 @@ def daily_report(
     parts.append(
         _table(
             portfolio,
-            ["code", "shares", "avg_cost", "price", "pnl_pct", "unrealized_pnl", "weight_pct"],
+            [
+                "code",
+                "name",
+                "shares",
+                "avg_cost",
+                "price",
+                "pnl_pct",
+                "unrealized_pnl",
+                "weight_pct",
+            ],
         )
     )
     parts.append("\n## 自选股技术信号\n")
@@ -48,6 +57,7 @@ def daily_report(
             signals,
             [
                 "code",
+                "name",
                 "close",
                 "score",
                 "ma_bull",

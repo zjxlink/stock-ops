@@ -142,6 +142,7 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
         pf,
         [
             ("code", "代码", "text"),
+            ("name", "名称", "text"),
             ("_spark", "60日", "spark"),
             ("shares", "股数", "int"),
             ("avg_cost", "成本", "num"),
@@ -161,6 +162,7 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
         sig,
         [
             ("code", "代码", "text"),
+            ("name", "名称", "text"),
             ("_spark", "60日", "spark"),
             ("close", "收盘", "num"),
             ("score", "评分", "int"),
