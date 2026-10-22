@@ -22,7 +22,7 @@ START = (date.today() - timedelta(days=200)).isoformat()
 END = date.today().isoformat()
 
 
-def check(name: str, fn):
+def check(name: str, fn, print=print):
     try:
         df = fn()
         n = len(df)
@@ -39,18 +39,29 @@ def check(name: str, fn):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=None)
+    ap.add_argument("--summary", default=None, help="把结果写成 Markdown 到该文件")
     args = ap.parse_args()
 
     results = {}
+    lines: list[str] = []
+    _print = print
+
+    def print(*a):
+        msg = " ".join(str(x) for x in a)
+        lines.append(msg)
+        _print(msg)
+
     bs = BaostockProvider()
-    results["baostock.daily"] = check("baostock.daily", lambda: bs.daily(CODE, START, END))
+    results["baostock.daily"] = check("baostock.daily", lambda: bs.daily(CODE, START, END), print)
     bs.close()
     results["akshare_tx.daily"] = check(
         "akshare_tx.daily", lambda: AkshareTxProvider().daily(CODE, START, END)
     )
     em = AkshareEmProvider()
-    results["akshare_em.daily"] = check("akshare_em.daily", lambda: em.daily(CODE, START, END))
-    results["akshare_em.snapshot"] = check("akshare_em.snapshot", em.snapshot)
+    results["akshare_em.daily"] = check(
+        "akshare_em.daily", lambda: em.daily(CODE, START, END), print
+    )
+    results["akshare_em.snapshot"] = check("akshare_em.snapshot", em.snapshot, print)
 
     # 完整流程：Fetcher 自动切换 -> 缓存 -> 信号 -> 筛选
     db = Path(args.db) if args.db else Path(tempfile.mkdtemp()) / "smoke.db"
@@ -77,6 +88,13 @@ def main() -> int:
 
     failed = [k for k, v in results.items() if not v]
     print("\n失败项:", failed or "无")
+    if args.summary:
+        body = (
+            f"### Live data smoke {date.today().isoformat()}\n\n```\n"
+            + "\n".join(lines)
+            + "\n```\n"
+        )
+        Path(args.summary).write_text(body, encoding="utf-8")
     # 日K 至少一个源可用且流程走通即视为通过；快照失败只告警
     core_ok = results.get("pipeline") and any(
         results[k] for k in ("baostock.daily", "akshare_tx.daily", "akshare_em.daily")
