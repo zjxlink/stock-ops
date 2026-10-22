@@ -1,0 +1,44 @@
+name: Parameter sweep
+
+# 手动触发：在 GitHub 服务器上扫描 策略 × ATR 倍数 × 大盘过滤 组合，结果写成 commit 评论。
+on:
+  workflow_dispatch:
+    inputs:
+      strategies:
+        default: "breakout20,donchian,trend60,ma_bull,macd"
+      atr:
+        default: "0,2,3,4"
+      regime_ma:
+        default: "0,60,120"
+      min_hold:
+        default: "5"
+
+permissions:
+  contents: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - uses: actions/cache/restore@v4
+        with:
+          path: data/stock_ops.db
+          key: stock-ops-db-
+          restore-keys: stock-ops-db-
+      - name: Ensure data
+        run: python scripts/daily_job.py --force --no-snapshot --out /tmp/rep --site /tmp/site
+      - run: python scripts/sweep.py --strategies "${{ inputs.strategies }}" --atr "${{ inputs.atr }}" --regime-ma "${{ inputs.regime_ma }}" --min-hold "${{ inputs.min_hold }}" --out sweep.md
+      - name: Post result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -f sweep.md || echo "sweep 失败，请查看 Actions 日志" > sweep.md
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -F body=@sweep.md > /dev/null

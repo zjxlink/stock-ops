@@ -108,6 +108,7 @@ def build_report(
             {c: cache.daily(c, start=str(cfg.backtest["start"])) for c in codes},
             strat,
             cfg.backtest_config(),
+            regime,
         )
         if not table.empty:
             table.insert(1, "name", table["code"].map(names).fillna(""))
@@ -132,6 +133,7 @@ def build_report(
                     {c: cache.daily(c, start=str(cfg.backtest["start"])) for c in codes},
                     st,
                     cfg.backtest_config(),
+                    regime,
                 )[0]
             )
             if not t.empty:
