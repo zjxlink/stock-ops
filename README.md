@@ -14,7 +14,19 @@
 
 设计依据见 [docs/market-research.md](docs/market-research.md)。
 
-## 安装
+## 全托管用法（不装任何东西）
+
+| 想做什么 | 怎么做 |
+|---|---|
+| 看持仓、信号、筛选 | 打开看板 https://zjxlink.github.io/stock-ops/ ，每个工作日盘后自动刷新 |
+| 录入一笔交易 | 看板上点「录入交易」，或在仓库 [新建 Issue](https://github.com/zjxlink/stock-ops/issues/new?template=trade.yml) 填表单；也可以直接在 Issue 里写 `buy 600519 1500 100` 这样的文本，每行一笔 |
+| 看历史日报 | [reports/](reports/) 目录，每天一份 Markdown |
+| 立刻刷新 | Actions 页面手动运行 `Daily report` |
+| 改自选股和筛选阈值 | 直接在网页上编辑 [config.yaml](config.yaml) |
+
+录入交易只认仓库所有者发的 Issue，其他人提交会被忽略。流水保存在 [data/trades.csv](data/trades.csv)，可以直接编辑。
+
+## 本地安装（可选）
 
 ```bash
 git clone https://github.com/zjxlink/stock-ops.git
@@ -52,7 +64,14 @@ ruff check . && ruff format .
 python scripts/smoke_live.py   # 真实数据冒烟测试，需要外网
 ```
 
-GitHub Actions：`CI` 在每次推送时跑单测和 lint；`Live data smoke` 每个工作日盘后在 GitHub 服务器上真实访问数据源，可手动触发。
+GitHub Actions 工作流：
+
+| 工作流 | 触发 | 作用 |
+|---|---|---|
+| CI | 每次推送 | 单测与 lint |
+| Live data smoke | 工作日 18:30 / 手动 | 在 GitHub 服务器上真实访问各数据源，结果写成 commit 评论 |
+| Daily report | 工作日 18:30 / 手动 | 更新数据、生成日报和看板、提交并发布到 GitHub Pages |
+| Trade entry | 新建 Issue | 解析交易指令写入 trades.csv，回复并关闭 Issue，触发看板刷新 |
 
 ## 目录结构
 
@@ -62,9 +81,13 @@ stock_ops/
   data/                数据源抽象、Baostock / AKShare 实现、SQLite 缓存、抓取编排
   analysis/            指标计算、技术信号、基本面筛选
   portfolio/           持仓账本
-  report/              Markdown 日报
+  report/              日报组装、Markdown 日报、静态 HTML 看板
   cli.py               命令行入口
+scripts/daily_job.py   每日盘后任务
+scripts/trade_from_issue.py  Issue 录入交易
 scripts/smoke_live.py  真实数据冒烟测试
+site/                  看板输出（自动生成）
+reports/               日报归档（自动生成）
 tests/                 离线测试（合成数据）
 docs/market-research.md
 ```

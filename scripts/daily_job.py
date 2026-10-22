@@ -19,6 +19,7 @@ from stock_ops.data.baostock_provider import BaostockProvider
 from stock_ops.data.fetch import build_providers
 from stock_ops.portfolio import TradeBook
 from stock_ops.report import build_report, daily_report
+from stock_ops.report.html import write_site
 
 log = logging.getLogger("daily")
 
@@ -27,6 +28,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=None)
     ap.add_argument("--out", default="reports")
+    ap.add_argument("--site", default="site", help="静态看板输出目录")
     ap.add_argument("--force", action="store_true", help="非交易日也运行")
     ap.add_argument("--no-snapshot", action="store_true")
     args = ap.parse_args()
@@ -73,6 +75,7 @@ def main() -> int:
     (out / f"{today}.md").write_text(text, encoding="utf-8")
     (out / "latest.md").write_text(text, encoding="utf-8")
     log.info("日报已写入 %s", out / f"{today}.md")
+    log.info("看板已写入 %s", write_site(rd, cache, cfg, args.site))
     return 0
 
 

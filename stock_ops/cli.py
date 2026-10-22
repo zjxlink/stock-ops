@@ -225,7 +225,9 @@ def report(
     text = daily_report(rd.date, rd.portfolio, rd.signals, rd.screened)
     (out / f"{today}.md").write_text(text, encoding="utf-8")
     (out / "latest.md").write_text(text, encoding="utf-8")
-    rprint(f"已写入 {out / f'{today}.md'}")
+    from .report.html import write_site
+
+    rprint(f"已写入 {out / f'{today}.md'} 与 {write_site(rd, cache, cfg, out.parent / 'site')}")
 
 
 if __name__ == "__main__":

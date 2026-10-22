@@ -1,0 +1,57 @@
+name: Trade entry
+
+# 仓库所有者新建 Issue（表单或自由文本）即录入交易；其他人提交会被忽略。
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: trades-csv
+  cancel-in-progress: false
+
+jobs:
+  record:
+    if: github.event.issue.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: Parse and record
+        id: rec
+        env:
+          TITLE: ${{ github.event.issue.title }}
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          printf '%s' "$BODY" > body.txt
+          set +e
+          python scripts/trade_from_issue.py --title "$TITLE" --body-file body.txt --reply-file reply.md
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+      - name: Commit trades
+        if: steps.rec.outputs.rc == '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/trades.csv
+          git commit -m "交易录入 #${ISSUE}"
+          git push
+      - name: Reply and close
+        if: always()
+        run: |
+          test -f reply.md || echo "录入脚本异常退出，请查看 Actions 日志。" > reply.md
+          gh issue comment "$ISSUE" --repo "${{ github.repository }}" --body-file reply.md
+          if [ "${{ steps.rec.outputs.rc }}" = "0" ]; then gh issue close "$ISSUE" --repo "${{ github.repository }}" --reason completed; fi
+      - name: Refresh dashboard
+        if: steps.rec.outputs.rc == '0'
+        run: gh workflow run daily.yml --repo "${{ github.repository }}" -f force=true

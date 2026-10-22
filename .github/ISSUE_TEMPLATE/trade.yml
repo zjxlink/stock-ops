@@ -1,0 +1,48 @@
+name: 录入交易
+description: 提交一笔买入或卖出，自动写入 data/trades.csv
+title: "录入交易"
+labels: [trade]
+body:
+  - type: dropdown
+    id: side
+    attributes:
+      label: 方向
+      options: ["buy 买入", "sell 卖出"]
+    validations:
+      required: true
+  - type: input
+    id: code
+    attributes:
+      label: 代码
+      placeholder: "600519"
+    validations:
+      required: true
+  - type: input
+    id: price
+    attributes:
+      label: 价格
+      placeholder: "1500.00"
+    validations:
+      required: true
+  - type: input
+    id: shares
+    attributes:
+      label: 股数
+      placeholder: "100"
+    validations:
+      required: true
+  - type: input
+    id: fee
+    attributes:
+      label: 手续费
+      placeholder: "5"
+  - type: input
+    id: date
+    attributes:
+      label: 日期
+      description: 留空为今天
+      placeholder: "2026-10-22"
+  - type: input
+    id: note
+    attributes:
+      label: 备注
