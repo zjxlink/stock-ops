@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Local data and config (never commit holdings or caches)
+data/*
+!data/.gitkeep
+config.yaml
+*.db
+*.sqlite
+*.parquet
+reports/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

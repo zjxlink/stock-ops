@@ -1,0 +1,21 @@
+name: Live data smoke
+
+# 在 GitHub 托管服务器上真实访问 baostock / akshare，验证数据源可用性。
+# 手动触发，或每个工作日北京时间 18:30 (UTC 10:30) 自动跑一次。
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 10 * * 1-5"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - run: python scripts/smoke_live.py

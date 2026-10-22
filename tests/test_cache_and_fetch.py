@@ -1,0 +1,60 @@
+import pandas as pd
+
+from stock_ops.data import Cache, Fetcher
+from stock_ops.data.base import empty_daily
+from tests.conftest import make_daily
+
+
+class FailingProvider:
+    name = "fail"
+
+    def daily(self, code, start, end):
+        raise ConnectionError("boom")
+
+    def snapshot(self):
+        raise NotImplementedError
+
+
+class FakeProvider:
+    name = "fake"
+
+    def __init__(self):
+        self.calls = []
+
+    def daily(self, code, start, end):
+        self.calls.append((code, start, end))
+        df = make_daily(code)
+        return df[(df["date"] >= start) & (df["date"] <= end)]
+
+    def snapshot(self):
+        raise NotImplementedError
+
+
+def test_cache_roundtrip(tmp_path):
+    c = Cache(tmp_path / "t.db")
+    df = make_daily("600000", n=10)
+    assert c.upsert_daily(df) == 10
+    assert c.upsert_daily(df) == 10  # 幂等
+    back = c.daily("600000")
+    assert len(back) == 10 and back["close"].iloc[-1] == df["close"].iloc[-1]
+    assert c.last_date("600000") == df["date"].iloc[-1]
+    assert c.latest_closes(["600000"])["600000"] == df["close"].iloc[-1]
+
+
+def test_fetch_fallback_and_incremental(tmp_path):
+    c = Cache(tmp_path / "t.db")
+    fake = FakeProvider()
+    f = Fetcher(c, providers=[FailingProvider(), fake], request_interval=0, max_retries=1)
+    n1 = f.update_daily("600000", start="2025-01-01", end="2025-03-31")
+    assert n1 > 0 and fake.calls[0][1] == "2025-01-01"
+    n2 = f.update_daily("600000", start="2025-01-01", end="2025-06-30")
+    assert n2 > 0 and fake.calls[1][1] > "2025-03-31"  # 从缓存末日之后增量
+    assert len(c.daily("600000")) == n1 + n2
+
+
+def test_trades_crud(tmp_path):
+    c = Cache(tmp_path / "t.db")
+    tid = c.add_trade("600519", "2026-01-01", "buy", 100, 100, 5, "test")
+    assert len(c.trades()) == 1
+    assert c.delete_trade(tid) and c.trades().empty
+    assert isinstance(empty_daily(), pd.DataFrame)
