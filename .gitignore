@@ -9,14 +9,10 @@ dist/
 .pytest_cache/
 .ruff_cache/
 
-# Local data and config (never commit holdings or caches)
-data/*
-!data/.gitkeep
-config.yaml
-*.db
-*.sqlite
-*.parquet
-reports/
+# 本地缓存不入库；data/trades.csv、config.yaml、reports/ 入库，供 GitHub Actions 与本地共用
+data/*.db
+data/*.sqlite
+data/*.parquet
 
 # OS / editor
 .DS_Store

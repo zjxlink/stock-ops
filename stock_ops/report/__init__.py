@@ -1,3 +1,4 @@
+from .build import build_report
 from .markdown import daily_report
 
-__all__ = ["daily_report"]
+__all__ = ["build_report", "daily_report"]

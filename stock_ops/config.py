@@ -35,6 +35,7 @@ DEFAULTS: dict[str, Any] = {
             "lookback_days": 120,
         },
     },
+    "portfolio": {"trades_path": "data/trades.csv"},
     "watchlist": [],
 }
 
@@ -69,6 +70,11 @@ class Config:
     @property
     def db_path(self) -> Path:
         p = Path(self.raw["data"]["db_path"])
+        return p if p.is_absolute() else self.root / p
+
+    @property
+    def trades_path(self) -> Path:
+        p = Path(self.raw["portfolio"]["trades_path"])
         return p if p.is_absolute() else self.root / p
 
     @property

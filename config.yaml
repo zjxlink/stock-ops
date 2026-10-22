@@ -1,0 +1,29 @@
+# 复制为 config.yaml 后按需修改。config.yaml 已被 .gitignore 忽略。
+data:
+  db_path: data/stock_ops.db
+  provider_order: [baostock, akshare_tx, akshare_em]   # 历史K线数据源优先级
+  request_interval: 0.3                                 # 每次请求后的休眠秒数
+  max_retries: 3
+
+screen:
+  fundamental:
+    pe_ttm_max: 40
+    pe_ttm_min: 0
+    pb_max: 8
+    total_mv_min: 5.0e9       # 总市值下限（元）
+    turnover_min: 0.5         # 换手率下限（%）
+    exclude_st: true
+    min_listed_days: 250
+  technical:
+    ma_fast: 5
+    ma_mid: 20
+    ma_slow: 60
+    rsi_period: 14
+    rsi_max: 75
+    volume_ratio_min: 1.2
+    lookback_days: 120
+
+watchlist:
+  - "600519"   # 贵州茅台
+  - "000858"   # 五粮液
+  - "300750"   # 宁德时代

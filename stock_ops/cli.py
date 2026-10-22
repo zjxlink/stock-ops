@@ -17,8 +17,8 @@ from .analysis.technical import rank_signals
 from .config import Config
 from .data import Cache, Fetcher, normalize_code
 from .data.fetch import build_providers
-from .portfolio import portfolio_summary, positions_from_trades
-from .report import daily_report
+from .portfolio import TradeBook, portfolio_summary, positions_from_trades
+from .report import build_report, daily_report
 
 app = typer.Typer(help="个人 A 股分析操作系统", no_args_is_help=True)
 trade_app = typer.Typer(help="交易流水与持仓")
@@ -80,7 +80,7 @@ def update(
     targets = (
         [normalize_code(c) for c in codes]
         if codes
-        else sorted(set(cfg.watchlist) | set(cache.trades()["code"].astype(str)))
+        else sorted(set(cfg.watchlist) | set(TradeBook(cfg.trades_path).codes()))
     )
     if not targets and not snapshot:
         rprint(
@@ -160,30 +160,33 @@ def trade_add(
     """记录一笔交易。"""
     if side not in ("buy", "sell"):
         raise typer.BadParameter("side 必须是 buy 或 sell")
-    _, cache = _ctx(config)
-    tid = cache.add_trade(normalize_code(code), on, side, price, shares, fee, note)
+    cfg, _ = _ctx(config)
+    tid = TradeBook(cfg.trades_path).add(normalize_code(code), on, side, price, shares, fee, note)
     rprint(f"已记录 #{tid}: {on} {side} {code} {shares}股 @ {price}")
 
 
 @trade_app.command("list")
 def trade_list(code: str | None = None, config: str | None = typer.Option(None, "--config", "-c")):
     """列出交易流水。"""
-    _, cache = _ctx(config)
-    _print_df(cache.trades(normalize_code(code) if code else None), "交易流水", max_rows=200)
+    cfg, _ = _ctx(config)
+    df = TradeBook(cfg.trades_path).load()
+    if code:
+        df = df[df["code"] == normalize_code(code)]
+    _print_df(df, "交易流水", max_rows=200)
 
 
 @trade_app.command("rm")
 def trade_rm(trade_id: int, config: str | None = typer.Option(None, "--config", "-c")):
     """删除一笔交易。"""
-    _, cache = _ctx(config)
-    rprint("已删除" if cache.delete_trade(trade_id) else "[red]未找到[/]")
+    cfg, _ = _ctx(config)
+    rprint("已删除" if TradeBook(cfg.trades_path).delete(trade_id) else "[red]未找到[/]")
 
 
 @app.command()
 def portfolio(config: str | None = typer.Option(None, "--config", "-c")):
     """当前持仓与盈亏（价格取本地缓存最新收盘）。"""
-    _, cache = _ctx(config)
-    book = positions_from_trades(cache.trades())
+    cfg, cache = _ctx(config)
+    book = positions_from_trades(TradeBook(cfg.trades_path).load())
     held = {c: p for c, p in book.items() if p.shares > 0}
     prices = cache.latest_closes(list(held))
     summary = portfolio_summary(held, prices)
@@ -214,23 +217,15 @@ def report(
     out: Path = typer.Option(Path("reports"), help="输出目录"),
     config: str | None = typer.Option(None, "--config", "-c"),
 ):
-    """生成 Markdown 日报到 reports/YYYY-MM-DD.md。"""
+    """生成 Markdown 日报到 reports/YYYY-MM-DD.md 与 reports/latest.md。"""
     cfg, cache = _ctx(config)
-    book = {c: p for c, p in positions_from_trades(cache.trades()).items() if p.shares > 0}
-    summary = portfolio_summary(book, cache.latest_closes(list(book)))
-    sigs = rank_signals(
-        [
-            technical_signals(cache.daily(c), cfg.technical)
-            for c in sorted(set(cfg.watchlist) | set(book))
-        ]
-    )
-    snap = cache.snapshot()
-    screened = fundamental_screen(snap, cfg.fundamental) if not snap.empty else snap
     today = date.today().isoformat()
+    rd = build_report(cfg, cache, today)
     out.mkdir(parents=True, exist_ok=True)
-    path = out / f"{today}.md"
-    path.write_text(daily_report(today, summary, sigs, screened), encoding="utf-8")
-    rprint(f"已写入 {path}")
+    text = daily_report(rd.date, rd.portfolio, rd.signals, rd.screened)
+    (out / f"{today}.md").write_text(text, encoding="utf-8")
+    (out / "latest.md").write_text(text, encoding="utf-8")
+    rprint(f"已写入 {out / f'{today}.md'}")
 
 
 if __name__ == "__main__":

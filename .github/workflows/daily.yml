@@ -1,0 +1,54 @@
+name: Daily report
+
+# 每个工作日北京时间 18:30 (UTC 10:30) 盘后运行：更新数据 -> 生成日报 -> 提交到 reports/。
+# 非交易日由脚本自动跳过。也可在 Actions 页面手动触发。
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "非交易日也强制运行"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "30 10 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-report
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+
+      # 日K 缓存跨天复用，减少重复抓取；缓存丢失时脚本会自动全量补齐
+      - uses: actions/cache@v4
+        with:
+          path: data/stock_ops.db
+          key: stock-ops-db-${{ github.run_id }}
+          restore-keys: stock-ops-db-
+
+      - name: Run daily job
+        run: python scripts/daily_job.py ${{ inputs.force && '--force' || '' }}
+
+      - name: Commit report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports/
+          if git diff --cached --quiet; then
+            echo "没有新日报"
+          else
+            git commit -m "日报 $(TZ=Asia/Shanghai date +%F)"
+            git push
+          fi

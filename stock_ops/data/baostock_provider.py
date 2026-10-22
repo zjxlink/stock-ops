@@ -66,6 +66,16 @@ class BaostockProvider:
             df[col] = pd.to_numeric(df[col], errors="coerce")
         return df[DAILY_COLUMNS]
 
+    def is_trading_day(self, day: str) -> bool:
+        bs = self._ensure_login()
+        rs = bs.query_trade_dates(start_date=day, end_date=day)
+        if rs.error_code != "0":
+            raise ConnectionError(f"baostock query_trade_dates failed: {rs.error_msg}")
+        rows = []
+        while rs.next():
+            rows.append(rs.get_row_data())
+        return bool(rows) and rows[0][1] == "1"
+
     def stock_list(self, day: str | None = None, lookback_days: int = 10) -> pd.DataFrame:
         """全部 A 股代码与名称。当天数据盘后才生成，因此从 day 起向前回退到最近有数据的交易日。"""
         bs = self._ensure_login()

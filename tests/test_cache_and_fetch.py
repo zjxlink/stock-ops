@@ -1,7 +1,6 @@
 import pandas as pd
 
 from stock_ops.data import Cache, Fetcher
-from stock_ops.data.base import empty_daily
 from tests.conftest import make_daily
 
 
@@ -50,14 +49,6 @@ def test_fetch_fallback_and_incremental(tmp_path):
     n2 = f.update_daily("600000", start="2025-01-01", end="2025-06-30")
     assert n2 > 0 and fake.calls[1][1] > "2025-03-31"  # 从缓存末日之后增量
     assert len(c.daily("600000")) == n1 + n2
-
-
-def test_trades_crud(tmp_path):
-    c = Cache(tmp_path / "t.db")
-    tid = c.add_trade("600519", "2026-01-01", "buy", 100, 100, 5, "test")
-    assert len(c.trades()) == 1
-    assert c.delete_trade(tid) and c.trades().empty
-    assert isinstance(empty_daily(), pd.DataFrame)
 
 
 def test_snapshot_fallback_order(tmp_path):

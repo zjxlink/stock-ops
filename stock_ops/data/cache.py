@@ -22,12 +22,6 @@ CREATE TABLE IF NOT EXISTS snapshot (
     turnover REAL, volume REAL, amount REAL,
     updated_at TEXT
 );
-CREATE TABLE IF NOT EXISTS trades (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    code TEXT NOT NULL, date TEXT NOT NULL, side TEXT NOT NULL,
-    price REAL NOT NULL, shares INTEGER NOT NULL, fee REAL DEFAULT 0,
-    note TEXT
-);
 CREATE INDEX IF NOT EXISTS idx_daily_code ON daily(code);
 """
 
@@ -99,33 +93,3 @@ class Cache:
     def snapshot(self) -> pd.DataFrame:
         df = pd.read_sql("SELECT * FROM snapshot", self.conn)
         return df if not df.empty else empty_snapshot()
-
-    # ---- trades ----
-    def add_trade(
-        self,
-        code: str,
-        date: str,
-        side: str,
-        price: float,
-        shares: int,
-        fee: float = 0,
-        note: str = "",
-    ) -> int:
-        cur = self.conn.execute(
-            "INSERT INTO trades (code,date,side,price,shares,fee,note) VALUES (?,?,?,?,?,?,?)",
-            (code, date, side, price, shares, fee, note),
-        )
-        self.conn.commit()
-        return int(cur.lastrowid)
-
-    def trades(self, code: str | None = None) -> pd.DataFrame:
-        if code:
-            return pd.read_sql(
-                "SELECT * FROM trades WHERE code=? ORDER BY date,id", self.conn, params=[code]
-            )
-        return pd.read_sql("SELECT * FROM trades ORDER BY date,id", self.conn)
-
-    def delete_trade(self, trade_id: int) -> bool:
-        cur = self.conn.execute("DELETE FROM trades WHERE id=?", (trade_id,))
-        self.conn.commit()
-        return cur.rowcount > 0
