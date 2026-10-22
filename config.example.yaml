@@ -33,6 +33,12 @@ market:
   index: "sh.000300"        # 大盘过滤用的指数（baostock 代码）
   ma: 60                    # 指数收盘低于该均线时不开新仓；设 0 关闭过滤
 
+predict:
+  path: data/predictions.csv
+  window: 60                # 准确率统计窗口（最近 N 条已验证预测）
+  min_n: 40                 # 低于此样本数不判定显著
+  backfill_days: 250        # 首次运行回填的历史天数（标记为回填，与真实前瞻区分）
+
 backtest:
   strategy: donchian        # 可选: ma_bull / golden_cross / macd / breakout20 / score / trend60 / donchian
   start: "2019-01-01"
@@ -46,6 +52,7 @@ backtest:
   atr_stop: 2.0             # ATR 跟踪止损：止损线 = 持仓期间最高收盘 - 2 倍 ATR，只升不降；留空不启用
   min_hold_days: 5          # 最少持仓天数内忽略信号出场（止损仍有效）
   cooldown_days: 10         # 止损出局后冷却天数内不重新进场
+  max_positions: 3          # 组合回测：最多同时持有几只
   take_profit:              # 止盈，如 0.3；留空不启用
 
 watchlist:

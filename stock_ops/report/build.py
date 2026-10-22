@@ -9,10 +9,11 @@ import pandas as pd
 from ..analysis import fundamental_screen, technical_signals
 from ..analysis.plan import build_plan
 from ..analysis.technical import rank_signals
-from ..backtest import STRATEGIES, get_strategy, market_regime, run_many
+from ..backtest import STRATEGIES, get_strategy, market_regime, run_many, run_portfolio
 from ..config import Config
 from ..data import Cache
 from ..portfolio import TradeBook, portfolio_summary, positions_from_trades
+from ..predict import PredictionLog, accuracy_table, best_methods
 
 
 @dataclass
@@ -32,6 +33,12 @@ class ReportData:
     strategy_compare: pd.DataFrame | None = None
     regime_ok: bool | None = None
     regime_note: str = ""
+    portfolio_bt: dict | None = None
+    portfolio_equity: list[float] | None = None
+    portfolio_note: str = ""
+    predictions: pd.DataFrame | None = None
+    accuracy: pd.DataFrame | None = None
+    prediction_note: str = ""
 
 
 def build_report(
@@ -102,6 +109,86 @@ def build_report(
             position_pct=float(cfg.plan["position_pct"]),
         )
         rd.plan_note = f"基于 {max(last_dates) if last_dates else as_of} 收盘，策略 {strat.name}（{strat.description}）。{rd.regime_note + '。' if rd.regime_note else ''}价格为挂单参考，开盘成交；仅供个人研究，不构成投资建议。"
+        # 明日涨跌预测与准确率
+        try:
+            plog = PredictionLog(cfg.predictions_path).load()
+            if not plog.empty:
+                acc = accuracy_table(
+                    plog, window=int(cfg.predict["window"]), min_n=int(cfg.predict["min_n"])
+                )
+                best = best_methods(acc)
+                latest = plog.sort_values("date").groupby(["code", "method"]).tail(1)
+                latest = latest[latest["code"].isin(codes)]
+                rows = []
+                for c in codes:
+                    g = latest[latest["code"] == c]
+                    if g.empty:
+                        continue
+                    b = best.get(c)
+                    if b:
+                        row = g[g["method"] == b["method"]]
+                        pred = int(row["pred"].iloc[0]) if not row.empty else None
+                        rows.append(
+                            {
+                                "code": c,
+                                "name": names.get(c, ""),
+                                "date": str(g["date"].max()),
+                                "reliable": True,
+                                "method": b["method"],
+                                "pred": "涨" if pred == 1 else "跌" if pred == 0 else "",
+                                "prob": float(row["prob"].iloc[0])
+                                if not row.empty
+                                else float("nan"),
+                                "acc": b["acc"],
+                                "ci_low": b["ci_low"],
+                                "baseline": b["baseline"],
+                                "n": int(b["n"]),
+                                "live_n": int(b["live_n"]),
+                            }
+                        )
+                    else:
+                        a = acc[acc["code"] == c].sort_values("acc", ascending=False)
+                        top = a.iloc[0] if not a.empty else None
+                        vote = g[g["method"] == "vote"]
+                        rows.append(
+                            {
+                                "code": c,
+                                "name": names.get(c, ""),
+                                "date": str(g["date"].max()),
+                                "reliable": False,
+                                "method": top["method"] if top is not None else "",
+                                "pred": ("涨" if int(vote["pred"].iloc[0]) == 1 else "跌")
+                                if not vote.empty
+                                else "",
+                                "prob": float("nan"),
+                                "acc": top["acc"] if top is not None else float("nan"),
+                                "ci_low": top["ci_low"] if top is not None else float("nan"),
+                                "baseline": top["baseline"] if top is not None else float("nan"),
+                                "n": int(top["n"]) if top is not None else 0,
+                                "live_n": int(top["live_n"]) if top is not None else 0,
+                            }
+                        )
+                rd.predictions = pd.DataFrame(rows)
+                rd.accuracy = acc[acc["code"].isin(codes)].reset_index(drop=True)
+                n_rel = sum(1 for r in rows if r["reliable"])
+                rd.prediction_note = (
+                    f"对次日涨跌的方向预测，共 {len(acc['method'].unique())} 种方法。准确率取最近 {cfg.predict['window']} 条已验证预测；"
+                    f"只有样本 ≥ {cfg.predict['min_n']}、95% 置信下限高于 50% 且高于基线（永远看涨/看跌）的方法才标为可参考。"
+                    f"当前 {len(rows)} 只中 {n_rel} 只有可参考方法。回填样本是用历史数据事后计算的，真实前瞻样本数见 live_n。"
+                )
+                if rd.plan is not None and not rd.plan.empty:
+                    txt = {}
+                    for r in rows:
+                        txt[r["code"]] = (
+                            f"{r['pred']}（{r['method']} {r['acc']:.0f}%，n={r['n']}）"
+                            if r["reliable"]
+                            else f"无可靠预测（最佳 {r['acc']:.0f}%）"
+                            if r["n"]
+                            else "无可靠预测"
+                        )
+                    rd.plan["prediction"] = rd.plan["code"].map(txt).fillna("")
+        except Exception:  # 预测日志缺失或格式问题不影响日报
+            rd.predictions = None
     if with_backtest and codes:
         strat = get_strategy(cfg.backtest["strategy"])
         table, results = run_many(
@@ -154,4 +241,22 @@ def build_report(
             if rows
             else None
         )
+        # 组合级回测：一份资金在这批股票间调度
+        try:
+            maxp = int(cfg.backtest.get("max_positions") or 3)
+            pr = run_portfolio(
+                {c: cache.daily(c, start=str(cfg.backtest["start"])) for c in codes},
+                strat,
+                cfg.backtest_config(),
+                regime,
+                max_positions=maxp,
+            )
+            rd.portfolio_bt = pr.metrics
+            rd.portfolio_equity = pr.equity.tolist()
+            rd.portfolio_note = (
+                f"同一策略与风控，一份资金 {cfg.backtest['initial_cash']:,} 在 {len(codes)} 只股票间调度，"
+                f"最多同时持有 {maxp} 只，每仓约 1/{maxp} 权益；对比等权买入持有"
+            )
+        except ValueError:
+            rd.portfolio_bt = None
     return rd

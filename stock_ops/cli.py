@@ -14,7 +14,7 @@ from rich.table import Table
 
 from .analysis import fundamental_screen, technical_signals
 from .analysis.technical import rank_signals
-from .backtest import STRATEGIES, get_strategy, run_many
+from .backtest import STRATEGIES, get_strategy, run_many, run_portfolio
 from .config import Config
 from .data import Cache, Fetcher, normalize_code
 from .data.fetch import build_providers
@@ -240,6 +240,10 @@ def backtest(
     start: str | None = typer.Option(None, help="起始日期，默认取配置"),
     stop_loss: float | None = typer.Option(None, help="止损比例，如 0.08；0 表示关闭"),
     trades: bool = typer.Option(False, "--trades", help="打印逐笔交易（仅单只股票）"),
+    portfolio: bool = typer.Option(
+        False, "--portfolio", help="组合级回测：一份资金在多只股票间调度"
+    ),
+    max_positions: int | None = typer.Option(None, help="组合回测最多同时持有几只，默认取配置"),
     config: str | None = typer.Option(None, "--config", "-c"),
 ):
     """基于本地缓存回测技术策略。"""
@@ -282,6 +286,22 @@ def backtest(
         )
         return
     strat = get_strategy(strategy or cfg.backtest["strategy"])
+    if portfolio:
+        import pandas as pd
+
+        pr = run_portfolio(
+            data,
+            strat,
+            bcfg,
+            max_positions=max_positions or int(cfg.backtest.get("max_positions") or 3),
+        )
+        rprint(
+            f"[bold]{strat.name}[/] 组合回测：{len(data)} 只，最多持有 {max_positions or cfg.backtest.get('max_positions')} 只，{start} 起"
+        )
+        _print_df(pd.DataFrame([pr.metrics]), "组合回测")
+        if trades:
+            _print_df(pd.DataFrame([t.__dict__ for t in pr.trades]), "逐笔交易", max_rows=500)
+        return
     table, results = run_many(data, strat, bcfg)
     rprint(f"[bold]{strat.name}[/]：{strat.description}；{start} 起；止损 {bcfg.stop_loss or '无'}")
     _print_df(table, "回测结果", names)

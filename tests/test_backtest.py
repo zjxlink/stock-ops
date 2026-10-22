@@ -102,6 +102,8 @@ def test_cli_backtest(tmp_path, monkeypatch):
     assert "600000" in r.output
     r = CliRunner().invoke(app, ["backtest", "-s", "all"])
     assert r.exit_code == 0 and "ma_bull" in r.output
+    r = CliRunner().invoke(app, ["backtest", "--portfolio", "--max-positions", "2"])
+    assert r.exit_code == 0 and "组合回测" in r.output, r.output
 
 
 def test_trailing_stop_triggers_from_peak():

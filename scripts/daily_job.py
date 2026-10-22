@@ -13,11 +13,14 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import pandas as pd
+
 from stock_ops.config import Config
 from stock_ops.data import Cache, Fetcher
 from stock_ops.data.baostock_provider import BaostockProvider
 from stock_ops.data.fetch import build_providers
 from stock_ops.portfolio import TradeBook
+from stock_ops.predict import PredictionLog, predict_latest, walk_forward
 from stock_ops.report import build_report, render_report
 from stock_ops.report.html import write_site
 
@@ -69,6 +72,31 @@ def main() -> int:
             log.info("快照 %d 只，来源 %s", n, src)
         except Exception as e:
             log.error("快照失败，沿用上次缓存: %s", e)
+
+    # 预测：先验证昨日，再对每只股票做明日预测；首次见到的股票回填历史
+    try:
+        stock_codes = [c for c in codes if "." not in c]
+        plog = PredictionLog(cfg.predictions_path)
+        _, nv = plog.verify({c: cache.daily(c) for c in stock_codes})
+        existing = plog.load()
+        new_rows = []
+        for c in stock_codes:
+            d = cache.daily(c)
+            if d is None or len(d) < 130:
+                continue
+            if existing.empty or not (existing["code"] == c).any():
+                new_rows.append(walk_forward(d, last_n=int(cfg.predict["backfill_days"]), code=c))
+            last_date = str(d["date"].iloc[-1])
+            if (
+                existing.empty
+                or not ((existing["code"] == c) & (existing["date"] == last_date)).any()
+            ):
+                new_rows.append(predict_latest(d, code=c))
+        if new_rows:
+            plog.append(pd.concat(new_rows, ignore_index=True))
+        log.info("预测：验证 %d 条，新增 %d 条", nv, sum(len(x) for x in new_rows))
+    except Exception as e:
+        log.error("预测步骤失败，跳过: %s", e)
 
     rd = build_report(cfg, cache, today)
     out = Path(args.out)

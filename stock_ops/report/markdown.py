@@ -6,7 +6,7 @@ import math
 
 import pandas as pd
 
-INT_COLS = {"shares", "trades", "score"}
+INT_COLS = {"shares", "trades", "score", "n", "live_n"}
 
 
 def _table(df: pd.DataFrame, cols: list[str], max_rows: int = 30) -> str:
@@ -40,6 +40,11 @@ def render_report(rd) -> str:
         rd.plan,
         rd.plan_note,
         getattr(rd, "strategy_compare", None),
+        getattr(rd, "portfolio_bt", None),
+        getattr(rd, "portfolio_note", ""),
+        getattr(rd, "predictions", None),
+        getattr(rd, "prediction_note", ""),
+        getattr(rd, "accuracy", None),
     )
 
 
@@ -53,6 +58,11 @@ def daily_report(
     plan: pd.DataFrame | None = None,
     plan_note: str = "",
     strategy_compare: pd.DataFrame | None = None,
+    portfolio_bt: dict | None = None,
+    portfolio_note: str = "",
+    predictions: pd.DataFrame | None = None,
+    prediction_note: str = "",
+    accuracy: pd.DataFrame | None = None,
 ) -> str:
     parts = [f"# 每日报告 {date}\n"]
     if plan is not None and not plan.empty:
@@ -73,6 +83,7 @@ def daily_report(
                     "exit_level",
                     "entry_level",
                     "reason",
+                    "prediction",
                 ],
             )
         )
@@ -151,6 +162,58 @@ def daily_report(
                     "avg_days",
                 ],
             )
+        )
+    if predictions is not None and not predictions.empty:
+        parts.append("\n## 明日涨跌预测与准确率\n")
+        parts.append(prediction_note + "\n")
+        pr = predictions.copy()
+        pr["reliable"] = pr["reliable"].map({True: "可参考", False: "不足"})
+        parts.append(
+            _table(
+                pr,
+                [
+                    "code",
+                    "name",
+                    "date",
+                    "reliable",
+                    "method",
+                    "pred",
+                    "prob",
+                    "acc",
+                    "ci_low",
+                    "baseline",
+                    "n",
+                    "live_n",
+                ],
+            )
+        )
+        if accuracy is not None and not accuracy.empty:
+            parts.append("\n各方法准确率（最近窗口）：\n")
+            parts.append(
+                _table(
+                    accuracy,
+                    [
+                        "code",
+                        "method",
+                        "n",
+                        "acc",
+                        "ci_low",
+                        "baseline",
+                        "significant",
+                        "live_n",
+                        "live_acc",
+                    ],
+                    max_rows=80,
+                )
+            )
+    if portfolio_bt:
+        parts.append("\n### 组合回测\n")
+        parts.append(portfolio_note + "\n")
+        m = portfolio_bt
+        parts.append(
+            "| 总收益 | 等权买入持有 | 超额 | 年化 | 最大回撤 | 夏普 | Calmar | 交易次数 | 胜率 | 盈亏比 | 平均持有天 | 资金使用率 |\n"
+            "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+            f"| {m['total_return']:.2f}% | {m['buy_hold']:.2f}% | {m['excess']:.2f}% | {m['cagr']:.2f}% | {m['max_drawdown']:.2f}% | {m['sharpe']:.2f} | {m['calmar']:.2f} | {m['trades']} | {m['win_rate']:.1f}% | {m['profit_factor']:.2f} | {m['avg_days']:.1f} | {m['exposure']:.1f}% |\n"
         )
     if strategy_compare is not None and not strategy_compare.empty:
         parts.append("\n### 各策略平均表现（同一批股票）\n")

@@ -38,6 +38,7 @@ DEFAULTS: dict[str, Any] = {
     "portfolio": {"trades_path": "data/trades.csv"},
     "plan": {"capital": 100000, "position_pct": 0.2, "rules": {}, "trailing_from": None},
     "market": {"index": "sh.000300", "ma": 60},
+    "predict": {"path": "data/predictions.csv", "window": 60, "min_n": 40, "backfill_days": 250},
     "backtest": {
         "strategy": "donchian",
         "start": "2019-01-01",
@@ -52,6 +53,7 @@ DEFAULTS: dict[str, Any] = {
         "min_hold_days": 5,
         "cooldown_days": 10,
         "take_profit": None,
+        "max_positions": 3,
     },
     "watchlist": [],
 }
@@ -100,6 +102,7 @@ class Config:
                 raw["backtest"] = _coerce_numbers(raw.get("backtest", {}))
                 raw["plan"] = _coerce_numbers(raw.get("plan", {}))
                 raw["market"] = _coerce_numbers(raw.get("market", {}))
+                raw["predict"] = _coerce_numbers(raw.get("predict", {}))
                 break
         return cls(raw=raw, root=root)
 
@@ -133,6 +136,15 @@ class Config:
         """单只股票的计划规则覆盖：mode(rule|hold)、stop_loss、trailing_stop、note。"""
         rules = self.plan.get("rules") or {}
         return dict(rules.get(str(code).zfill(6)) or rules.get(int(code)) or {}) if rules else {}
+
+    @property
+    def predict(self) -> dict[str, Any]:
+        return self.raw["predict"]
+
+    @property
+    def predictions_path(self) -> Path:
+        p = Path(self.predict["path"])
+        return p if p.is_absolute() else self.root / p
 
     @property
     def market(self) -> dict[str, Any]:

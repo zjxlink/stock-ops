@@ -226,9 +226,54 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
                 ("trail_price", "移动止损", "num"),
                 ("exit_level", "出场位", "num"),
                 ("entry_level", "进场位", "num"),
+                ("prediction", "明日预测", "text"),
                 ("reason", "说明", "text"),
             ],
         )
+    # 预测
+    pred_html, pred_note = "", ""
+    if rd.predictions is not None and not rd.predictions.empty:
+        pr = rd.predictions.copy()
+        pr["reliable"] = pr["reliable"].map({True: "可参考", False: "不足"})
+        pred_note = f'<p class="sub">{html.escape(rd.prediction_note)}</p>'
+        pred_html = _table(
+            pr,
+            [
+                ("code", "代码", "text"),
+                ("name", "名称", "text"),
+                ("date", "基于收盘", "text"),
+                ("reliable", "可靠性", "text"),
+                ("method", "方法", "text"),
+                ("pred", "明日", "text"),
+                ("prob", "概率", "num"),
+                ("acc", "准确率%", "num"),
+                ("ci_low", "置信下限%", "num"),
+                ("baseline", "基线%", "num"),
+                ("n", "样本", "int"),
+                ("live_n", "真实前瞻", "int"),
+            ],
+        )
+        if rd.accuracy is not None and not rd.accuracy.empty:
+            ac = rd.accuracy.copy()
+            ac["significant"] = ac["significant"].map({True: "✓", False: "·"})
+            pred_html += (
+                '<h3 style="font-size:15px;margin:18px 0 8px">各方法准确率（最近窗口，可按列排序）</h3>'
+                + _table(
+                    ac,
+                    [
+                        ("code", "代码", "text"),
+                        ("method", "方法", "text"),
+                        ("n", "样本", "int"),
+                        ("acc", "准确率%", "num"),
+                        ("ci_low", "置信下限%", "num"),
+                        ("baseline", "基线%", "num"),
+                        ("significant", "显著", "text"),
+                        ("live_n", "真实前瞻", "int"),
+                        ("live_acc", "前瞻准确率%", "num"),
+                    ],
+                    max_rows=100,
+                )
+            )
     # 回测
     bt_html, bt_note = "", ""
     if rd.backtest is not None and not rd.backtest.empty:
@@ -255,6 +300,22 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
                 ("profit_factor", "盈亏比", "num"),
                 ("avg_days", "平均持有天", "num"),
             ],
+        )
+    pf_bt_html = ""
+    if rd.portfolio_bt:
+        m = rd.portfolio_bt
+        spark = sparkline(rd.portfolio_equity or [], w=260, h=48)
+        pf_bt_html = (
+            '<h3 style="font-size:15px;margin:18px 0 8px">组合回测</h3>'
+            f'<p class="sub">{html.escape(rd.portfolio_note)}</p>'
+            '<div class="tiles">'
+            f'<div class="tile"><div class="k">总收益</div><div class="v">{_fmt(m["total_return"], "pct")}</div><div class="sub">等权买入持有 {_fmt(m["buy_hold"], "pct")}</div></div>'
+            f'<div class="tile"><div class="k">最大回撤</div><div class="v">{m["max_drawdown"]:.1f}%</div><div class="sub">Calmar {m["calmar"]:.2f}</div></div>'
+            f'<div class="tile"><div class="k">年化 / 夏普</div><div class="v">{m["cagr"]:.1f}%</div><div class="sub">夏普 {m["sharpe"]:.2f}</div></div>'
+            f'<div class="tile"><div class="k">交易 / 胜率 / 盈亏比</div><div class="v">{m["trades"]}</div><div class="sub">胜率 {m["win_rate"]:.0f}%，盈亏比 {m["profit_factor"]:.2f}</div></div>'
+            f'<div class="tile"><div class="k">资金使用率</div><div class="v">{m["exposure"]:.0f}%</div><div class="sub">平均持有 {m["avg_days"]:.0f} 天</div></div>'
+            f'<div class="tile"><div class="k">权益曲线</div>{spark}</div>'
+            "</div>"
         )
     cmp_html = ""
     if rd.strategy_compare is not None and not rd.strategy_compare.empty:
@@ -287,7 +348,8 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
 <h2>持仓</h2>{tiles}{pf_html}
 <h2>自选股与持仓股技术信号</h2>{sig_html}
 <h2>基本面筛选</h2>{scr_note}{scr_html}
-{"<h2>策略回测</h2>" + bt_note + bt_html + cmp_html if bt_html else ""}
+{"<h2>明日涨跌预测与准确率</h2>" + pred_note + pred_html if pred_html else ""}
+{"<h2>策略回测</h2>" + bt_note + bt_html + pf_bt_html + cmp_html if bt_html else ""}
 <footer>数据来源：Baostock、腾讯行情、东方财富。仅供个人研究，不构成投资建议。</footer>
 </main><script>{_JS}</script></body></html>"""
 
