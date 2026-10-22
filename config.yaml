@@ -26,6 +26,10 @@ screen:
 plan:
   capital: 100000           # 用于计算建议买入股数的总资金（元）
   position_pct: 0.2         # 单只股票仓位上限（占总资金比例）
+  rules:                    # 按股票覆盖计划规则。mode: hold 表示长期持有，只提示关键位，不发卖出指令
+    "300458":
+      mode: hold
+      note: 长期持有，看好公司
 
 backtest:
   strategy: ma_bull         # 可选: ma_bull / golden_cross / macd / breakout20 / score
@@ -35,8 +39,9 @@ backtest:
   min_commission: 5         # 最低佣金（元）
   stamp_duty: 0.0005        # 卖出印花税
   slippage: 0.001           # 单边滑点
-  stop_loss: 0.08           # 收盘低于成本 8% 次日止损；留空不启用
-  take_profit:              # 留空不启用
+  stop_loss:                # 成本止损，如 0.08 = 收盘低于成本 8% 次日卖出；留空不启用
+  trailing_stop: 0.15       # 移动止损，收盘自持仓期间最高收盘回撤 15% 次日卖出；留空不启用
+  take_profit:              # 止盈，如 0.3；留空不启用
 
 watchlist:
   - "600519"   # 贵州茅台

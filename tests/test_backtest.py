@@ -96,3 +96,14 @@ def test_cli_backtest(tmp_path, monkeypatch):
     assert "600000" in r.output
     r = CliRunner().invoke(app, ["backtest", "-s", "all"])
     assert r.exit_code == 0 and "ma_bull" in r.output
+
+
+def test_trailing_stop_triggers_from_peak():
+    df = _flat(n=200, price=10.0)
+    df.loc[110:119, ["open", "high", "low", "close"]] = 12.0  # 冲高到 12
+    df.loc[120:, ["open", "high", "low", "close"]] = 10.0  # 回到 10：自高点回撤 16.7%
+    entry = lambda x: pd.Series(x.index == 100, index=x.index)  # noqa: E731
+    cfg = BacktestConfig(stop_loss=None, trailing_stop=0.15, slippage=0, min_commission=0)
+    r = run_backtest(df, Strategy("t", "", entry, lambda x: pd.Series(False, index=x.index)), cfg)
+    assert len(r.trades) == 1 and r.trades[0].reason == "trailing_stop"
+    assert r.trades[0].exit_date == df["date"][121]

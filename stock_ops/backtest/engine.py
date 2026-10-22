@@ -22,6 +22,7 @@ class BacktestConfig:
     stamp_duty: float = 0.0005  # 卖出印花税
     slippage: float = 0.001  # 单边滑点
     stop_loss: float | None = None  # 0.08 = 收盘低于成本 8% 次日止损
+    trailing_stop: float | None = 0.15  # 收盘自持仓期间最高收盘回撤 15% 次日止损
     take_profit: float | None = None
     lot: int = 100  # 整手
     warmup: int = 60  # 指标预热期，之前不交易
@@ -75,7 +76,7 @@ def run_backtest(
     )
     code = str(x["code"].iloc[0])
 
-    cash, shares, cost_price, entry_i = cfg.initial_cash, 0, 0.0, -1
+    cash, shares, cost_price, entry_i, peak = cfg.initial_cash, 0, 0.0, -1, 0.0
     pending: str | None = None  # 次日开盘要执行的动作：buy / sell:<reason>
     equity = np.empty(len(x))
     trades: list[Trade] = []
@@ -89,7 +90,7 @@ def run_backtest(
             if qty > 0:
                 amt = qty * px
                 cash -= amt + _fee_buy(amt, cfg)
-                shares, cost_price, entry_i = qty, px, i
+                shares, cost_price, entry_i, peak = qty, px, i, 0.0
         elif pending and pending.startswith("sell") and shares > 0 and not math.isnan(o):
             px = o * (1 - cfg.slippage)
             amt = shares * px
@@ -108,15 +109,18 @@ def run_backtest(
                     pending.split(":", 1)[1],
                 )
             )
-            shares, cost_price, entry_i = 0, 0.0, -1
+            shares, cost_price, entry_i, peak = 0, 0.0, -1, 0.0
         pending = None
         equity[i] = cash + shares * (c if not math.isnan(c) else 0.0)
         # 2) 收盘确认次日指令
         if i < cfg.warmup or i == len(x) - 1:
             continue
         if shares > 0:
+            peak = max(peak, c) if not math.isnan(c) else peak
             if cfg.stop_loss and c <= cost_price * (1 - cfg.stop_loss):
                 pending = "sell:stop_loss"
+            elif cfg.trailing_stop and peak > 0 and c <= peak * (1 - cfg.trailing_stop):
+                pending = "sell:trailing_stop"
             elif cfg.take_profit and c >= cost_price * (1 + cfg.take_profit):
                 pending = "sell:take_profit"
             elif exit_[i]:

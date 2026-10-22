@@ -26,7 +26,12 @@ def test_watch_entry_signal_suggests_shares():
     row = plan_for_code(
         "A", df, get_strategy("ma_bull"), None, capital=100000, position_pct=0.2, stop_loss=0.08
     )
-    assert row["action"] == "买入" and row["shares"] % 100 == 0 and row["shares"] > 0
+    assert (
+        row["action"] == "买入"
+        and row["shares"] % 100 == 0
+        and row["shares"] > 0
+        and row["stop_price"] > 0
+    )
     assert row["shares"] * df["close"].iloc[-1] <= 20000
 
 
@@ -51,3 +56,50 @@ def test_build_plan_orders_sell_first_and_handles_missing():
     )
     assert list(df["action"]) == ["卖出", "买入", "观望"]
     assert df.iloc[1]["name"] == "涨股" and df.iloc[2]["reason"] == "历史数据不足"
+
+
+def test_hold_mode_never_sells_but_warns():
+    df = make_daily("A", n=200, seed=1, trend=-0.01)
+    pos = Position(
+        code="A",
+        shares=1000,
+        cost=1000 * df["close"].iloc[-1] * 1.5,
+        first_date=str(df["date"].iloc[0]),
+    )
+    row = plan_for_code(
+        "A",
+        df,
+        get_strategy("ma_bull"),
+        pos,
+        stop_loss=0.08,
+        trailing_stop=0.15,
+        rule={"mode": "hold", "note": "长期持有"},
+    )
+    assert row["action"] == "持有" and "长期持有" in row["reason"] and "注意" in row["reason"]
+    assert row["trail_price"] > 0 and "60日线" in row["reason"]
+
+
+def test_trailing_stop_in_plan_uses_peak_since_entry():
+    df = make_daily("A", n=200, seed=1, trend=0.0)
+    df.loc[150:159, "close"] = df["close"].iloc[149] * 1.5  # 持仓期内冲高
+    pos = Position(
+        code="A", shares=100, cost=100 * df["close"].iloc[140], first_date=str(df["date"].iloc[140])
+    )
+    row = plan_for_code("A", df, get_strategy("ma_bull"), pos, stop_loss=None, trailing_stop=0.15)
+    peak = df["close"].iloc[140:].max()
+    assert abs(row["trail_price"] - round(peak * 0.85, 2)) < 1e-6
+    assert row["action"] == "卖出" and "移动止损" in row["reason"]
+
+
+def test_per_stock_rule_overrides_trailing():
+    df = make_daily("A", n=200, seed=1, trend=0.01)
+    pos = Position(
+        code="A",
+        shares=100,
+        cost=100 * df["close"].iloc[-1] * 0.9,
+        first_date=str(df["date"].iloc[-5]),
+    )
+    row = plan_for_code(
+        "A", df, get_strategy("ma_bull"), pos, trailing_stop=0.15, rule={"trailing_stop": 0.05}
+    )
+    assert abs(row["trail_price"] - round(df["close"].iloc[-5:].max() * 0.95, 2)) < 1e-6

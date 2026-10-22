@@ -20,3 +20,15 @@ def test_yaml_string_exponent_is_coerced(tmp_path):
     cfg = Config.load(p, root=tmp_path)
     assert cfg.fundamental["total_mv_min"] == 5.0e9
     assert cfg.watchlist == []
+
+
+def test_stock_rule_lookup(tmp_path):
+    p = tmp_path / "c.yaml"
+    p.write_text(
+        'plan:\n  rules:\n    "300458":\n      mode: hold\n      trailing_stop: 0.2\n',
+        encoding="utf-8",
+    )
+    cfg = Config.load(p, root=tmp_path)
+    assert cfg.stock_rule("300458") == {"mode": "hold", "trailing_stop": 0.2}
+    assert cfg.stock_rule("600519") == {}
+    assert cfg.backtest_config().trailing_stop == 0.15 and cfg.backtest_config().stop_loss is None

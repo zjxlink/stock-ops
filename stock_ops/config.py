@@ -36,7 +36,7 @@ DEFAULTS: dict[str, Any] = {
         },
     },
     "portfolio": {"trades_path": "data/trades.csv"},
-    "plan": {"capital": 100000, "position_pct": 0.2},
+    "plan": {"capital": 100000, "position_pct": 0.2, "rules": {}},
     "backtest": {
         "strategy": "ma_bull",
         "start": "2019-01-01",
@@ -45,7 +45,8 @@ DEFAULTS: dict[str, Any] = {
         "min_commission": 5,
         "stamp_duty": 0.0005,
         "slippage": 0.001,
-        "stop_loss": 0.08,
+        "stop_loss": None,
+        "trailing_stop": 0.15,
         "take_profit": None,
     },
     "watchlist": [],
@@ -122,6 +123,11 @@ class Config:
     @property
     def plan(self) -> dict[str, Any]:
         return self.raw["plan"]
+
+    def stock_rule(self, code: str) -> dict[str, Any]:
+        """单只股票的计划规则覆盖：mode(rule|hold)、stop_loss、trailing_stop、note。"""
+        rules = self.plan.get("rules") or {}
+        return dict(rules.get(str(code).zfill(6)) or rules.get(int(code)) or {}) if rules else {}
 
     @property
     def backtest(self) -> dict[str, Any]:
