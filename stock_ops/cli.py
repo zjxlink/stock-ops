@@ -135,14 +135,26 @@ def screen(config: str | None = typer.Option(None, "--config", "-c"), top: int =
     if snap.empty:
         rprint("[yellow]快照为空，请先运行: stock-ops update --snapshot[/]")
         raise typer.Exit(1)
-    res = fundamental_screen(snap, cfg.fundamental)
+    res = fundamental_screen(snap, cfg.fundamental, cache.fundamentals())
     rprint(f"输入 {res.attrs['input_count']} 只，通过 {len(res)} 只，剔除 {res.attrs['rejects']}")
     if res.attrs.get("skipped"):
         rprint(f"[yellow]数据源缺字段，已跳过规则: {res.attrs['skipped']}[/]")
     _print_df(
         res,
         "基本面筛选",
-        ["code", "name", "price", "pe_ttm", "pb", "total_mv", "turnover"],
+        [
+            "code",
+            "name",
+            "price",
+            "pe_ttm",
+            "pb",
+            "total_mv",
+            "turnover",
+            "roe",
+            "yoy_ni",
+            "liability_to_asset",
+            "quality",
+        ],
         max_rows=top,
     )
 

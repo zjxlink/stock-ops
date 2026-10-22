@@ -22,6 +22,11 @@ CREATE TABLE IF NOT EXISTS snapshot (
     turnover REAL, volume REAL, amount REAL,
     updated_at TEXT
 );
+CREATE TABLE IF NOT EXISTS fundamentals (
+    code TEXT PRIMARY KEY, report_date TEXT, pub_date TEXT,
+    roe REAL, np_margin REAL, gp_margin REAL, eps_ttm REAL, yoy_ni REAL, yoy_revenue REAL, yoy_equity REAL,
+    liability_to_asset REAL, current_ratio REAL, cfo_to_np REAL, cfo_to_revenue REAL, updated_at TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_daily_code ON daily(code);
 """
 
@@ -93,3 +98,41 @@ class Cache:
     def snapshot(self) -> pd.DataFrame:
         df = pd.read_sql("SELECT * FROM snapshot", self.conn)
         return df if not df.empty else empty_snapshot()
+
+    # ---- fundamentals ----
+    def upsert_fundamentals(self, df: pd.DataFrame) -> int:
+        from .fundamentals import FUND_COLUMNS
+
+        if df is None or df.empty:
+            return 0
+        d = df.reindex(columns=FUND_COLUMNS)
+        rows = d.astype(object).where(pd.notna(d), None).values.tolist()
+        self.conn.executemany(
+            f"INSERT OR REPLACE INTO fundamentals ({','.join(FUND_COLUMNS)}) VALUES ({','.join('?' * len(FUND_COLUMNS))})",
+            rows,
+        )
+        self.conn.commit()
+        return len(rows)
+
+    def fundamentals(self, codes: list[str] | None = None) -> pd.DataFrame:
+        if codes is not None:
+            if not codes:
+                return pd.DataFrame()
+            q = ",".join("?" * len(codes))
+            return pd.read_sql(
+                f"SELECT * FROM fundamentals WHERE code IN ({q})", self.conn, params=list(codes)
+            )
+        return pd.read_sql("SELECT * FROM fundamentals", self.conn)
+
+    def fundamentals_stale(self, codes: list[str], max_age_days: int) -> list[str]:
+        """返回缓存缺失或超过 max_age_days 未更新的代码。"""
+        if not codes:
+            return []
+        df = self.fundamentals(codes)
+        fresh: set[str] = set()
+        if not df.empty:
+            cutoff = (pd.Timestamp.today().normalize() - pd.Timedelta(days=max_age_days)).strftime(
+                "%Y-%m-%d"
+            )
+            fresh = set(df[df["updated_at"].astype(str) >= cutoff]["code"])
+        return [c for c in codes if c not in fresh]

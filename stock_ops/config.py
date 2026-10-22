@@ -14,6 +14,7 @@ DEFAULTS: dict[str, Any] = {
         "provider_order": ["baostock", "akshare_tx", "akshare_em"],
         "request_interval": 0.3,
         "max_retries": 3,
+        "fundamentals_max_age_days": 7,
     },
     "screen": {
         "fundamental": {
@@ -24,6 +25,9 @@ DEFAULTS: dict[str, Any] = {
             "turnover_min": 0.5,
             "exclude_st": True,
             "min_listed_days": 250,
+            "roe_min": 8,
+            "yoy_ni_min": 0,
+            "liability_to_asset_max": 70,
         },
         "technical": {
             "ma_fast": 5,

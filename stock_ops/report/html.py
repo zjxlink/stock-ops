@@ -204,6 +204,11 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
             ("pb", "PB", "num"),
             ("total_mv", "市值(亿)", "yi"),
             ("turnover", "换手%", "num"),
+            ("roe", "ROE%", "num"),
+            ("yoy_ni", "净利同比%", "pct"),
+            ("liability_to_asset", "负债率%", "num"),
+            ("quality", "质量分", "num"),
+            ("report_date", "财报期", "text"),
         ],
         empty="尚未获取全市场快照。",
         max_rows=150,
@@ -228,6 +233,27 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
                 ("entry_level", "进场位", "num"),
                 ("prediction", "明日预测", "text"),
                 ("reason", "说明", "text"),
+            ],
+        )
+    # 持仓与自选基本面
+    fund_html, fund_note = "", ""
+    if rd.fundamentals is not None and not rd.fundamentals.empty:
+        fund_note = f'<p class="sub">{html.escape(rd.fund_note)}</p>'
+        fund_html = _table(
+            rd.fundamentals,
+            [
+                ("code", "代码", "text"),
+                ("name", "名称", "text"),
+                ("report_date", "财报期", "text"),
+                ("roe", "ROE%", "num"),
+                ("np_margin", "净利率%", "num"),
+                ("gp_margin", "毛利率%", "num"),
+                ("yoy_ni", "净利同比%", "pct"),
+                ("liability_to_asset", "负债率%", "num"),
+                ("cfo_to_np", "现金流/净利", "num"),
+                ("eps_ttm", "EPS TTM", "num"),
+                ("pe_ttm", "PE", "num"),
+                ("pb", "PB", "num"),
             ],
         )
     # 预测
@@ -347,6 +373,7 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
 {"<h2>下一交易日操作计划</h2>" + plan_note + plan_html if plan_html else ""}
 <h2>持仓</h2>{tiles}{pf_html}
 <h2>自选股与持仓股技术信号</h2>{sig_html}
+{"<h2>持仓与自选股基本面</h2>" + fund_note + fund_html if fund_html else ""}
 <h2>基本面筛选</h2>{scr_note}{scr_html}
 {"<h2>明日涨跌预测与准确率</h2>" + pred_note + pred_html if pred_html else ""}
 {"<h2>策略回测</h2>" + bt_note + bt_html + pf_bt_html + cmp_html if bt_html else ""}

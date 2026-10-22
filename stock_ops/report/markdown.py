@@ -45,6 +45,8 @@ def render_report(rd) -> str:
         getattr(rd, "predictions", None),
         getattr(rd, "prediction_note", ""),
         getattr(rd, "accuracy", None),
+        getattr(rd, "fundamentals", None),
+        getattr(rd, "fund_note", ""),
     )
 
 
@@ -63,6 +65,8 @@ def daily_report(
     predictions: pd.DataFrame | None = None,
     prediction_note: str = "",
     accuracy: pd.DataFrame | None = None,
+    fundamentals: pd.DataFrame | None = None,
+    fund_note: str = "",
 ) -> str:
     parts = [f"# 每日报告 {date}\n"]
     if plan is not None and not plan.empty:
@@ -130,16 +134,59 @@ def daily_report(
             ],
         )
     )
+    if fundamentals is not None and not fundamentals.empty:
+        parts.append("\n## 持仓与自选股基本面\n")
+        parts.append(fund_note + "\n")
+        parts.append(
+            _table(
+                fundamentals,
+                [
+                    "code",
+                    "name",
+                    "report_date",
+                    "roe",
+                    "np_margin",
+                    "gp_margin",
+                    "yoy_ni",
+                    "liability_to_asset",
+                    "cfo_to_np",
+                    "eps_ttm",
+                    "pe_ttm",
+                    "pb",
+                ],
+            )
+        )
     parts.append("\n## 基本面筛选\n")
     if screened is not None and "rejects" in screened.attrs:
         r = screened.attrs["rejects"]
         parts.append(
-            f"输入 {screened.attrs.get('input_count', 0)} 只，通过 {len(screened)} 只。剔除："
+            f"输入 {screened.attrs.get('input_count', 0)} 只，通过 {len(screened)} 只，其中有财报数据 {screened.attrs.get('fund_coverage', 0)} 只。剔除："
             + "，".join(f"{k} {v}" for k, v in r.items())
+            + (
+                f"。跳过（数据缺失）：{'、'.join(screened.attrs['skipped'])}"
+                if screened.attrs.get("skipped")
+                else ""
+            )
             + "\n"
         )
     parts.append(
-        _table(screened, ["code", "name", "price", "pe_ttm", "pb", "total_mv", "turnover"])
+        _table(
+            screened,
+            [
+                "code",
+                "name",
+                "price",
+                "pe_ttm",
+                "pb",
+                "total_mv",
+                "turnover",
+                "roe",
+                "yoy_ni",
+                "liability_to_asset",
+                "quality",
+                "report_date",
+            ],
+        )
     )
     if backtest is not None and not backtest.empty:
         parts.append("\n## 策略回测\n")

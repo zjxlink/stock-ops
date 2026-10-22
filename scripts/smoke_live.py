@@ -66,6 +66,17 @@ def main() -> int:
     results: dict[str, bool] = {}
     bs = BaostockProvider()
     results["baostock.daily"] = check("baostock.daily", lambda: bs.daily(CODE, START, END))
+    from stock_ops.data.fundamentals import BaostockFundamentals
+
+    try:
+        fr = BaostockFundamentals(bs).fetch("600519")
+        say(
+            f"[OK]   baostock.fundamentals(600519): 财报期 {fr['report_date']} ROE {fr['roe']} 净利同比 {fr['yoy_ni']} 负债率 {fr['liability_to_asset']}"
+        )
+        results["baostock.fundamentals"] = True
+    except Exception as e:
+        say(f"[FAIL] baostock.fundamentals: {type(e).__name__}: {str(e)[:200]}")
+        results["baostock.fundamentals"] = False
     results["baostock.index"] = check(
         "baostock.index(sh.000300)", lambda: bs.daily("sh.000300", START, END)
     )

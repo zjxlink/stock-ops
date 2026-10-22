@@ -130,4 +130,30 @@ class Fetcher:
         raise RuntimeError(f"所有快照源均失败: {last}")
 
 
-__all__ = ["Fetcher", "build_providers", "empty_daily"]
+def update_fundamentals(
+    cache: Cache,
+    codes: list[str],
+    max_age_days: int = 7,
+    time_budget_s: float | None = None,
+    today=None,
+) -> int:
+    """抓取缓存缺失或过期的基本面并写入，返回写入条数。"""
+    from .fundamentals import BaostockFundamentals
+
+    stale = cache.fundamentals_stale(codes, max_age_days)
+    if not stale:
+        return 0
+    bf = BaostockFundamentals()
+    try:
+        df = bf.fetch_many(
+            stale,
+            today=today,
+            time_budget_s=time_budget_s,
+            progress=lambda i, n: log.info("基本面 %d/%d", i, n),
+        )
+    finally:
+        bf.close()
+    return cache.upsert_fundamentals(df)
+
+
+__all__ = ["Fetcher", "build_providers", "empty_daily", "update_fundamentals"]

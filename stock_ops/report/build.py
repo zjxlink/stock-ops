@@ -39,6 +39,8 @@ class ReportData:
     predictions: pd.DataFrame | None = None
     accuracy: pd.DataFrame | None = None
     prediction_note: str = ""
+    fundamentals: pd.DataFrame | None = None
+    fund_note: str = ""
 
 
 def build_report(
@@ -70,9 +72,18 @@ def build_report(
         summary.insert(1, "name", summary["code"].map(names).fillna(""))
     if not sigs.empty:
         sigs.insert(1, "name", sigs["code"].map(names).fillna(""))
-    screened = fundamental_screen(snap, cfg.fundamental) if not snap.empty else snap
+    fund_all = cache.fundamentals()
+    screened = fundamental_screen(snap, cfg.fundamental, fund_all) if not snap.empty else snap
     updated = str(snap["updated_at"].iloc[0]) if not snap.empty and "updated_at" in snap else None
     rd = ReportData(as_of, summary, sigs, screened, closed, updated, price_note)
+    fund_codes = fund_all[fund_all["code"].isin(codes)] if not fund_all.empty else fund_all
+    if not fund_codes.empty:
+        ft = fund_codes.copy()
+        ft.insert(1, "name", ft["code"].map(names).fillna(""))
+        if not snap.empty:
+            ft = ft.merge(snap[["code", "pe_ttm", "pb", "total_mv"]], on="code", how="left")
+        rd.fundamentals = ft.sort_values("code").reset_index(drop=True)
+        rd.fund_note = "最新一期财报（Baostock 季度数据），比率单位 %。ROE 为报告期平均净资产收益率，净利润同比为归母净利润同比。"
     index_code, index_ma = str(cfg.market.get("index") or ""), int(cfg.market.get("ma") or 0)
     index_df = cache.daily(index_code) if index_code else None
     regime = market_regime(index_df, index_ma) if index_ma else None

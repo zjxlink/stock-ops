@@ -18,7 +18,7 @@ import pandas as pd
 from stock_ops.config import Config
 from stock_ops.data import Cache, Fetcher
 from stock_ops.data.baostock_provider import BaostockProvider
-from stock_ops.data.fetch import build_providers
+from stock_ops.data.fetch import build_providers, update_fundamentals
 from stock_ops.portfolio import TradeBook
 from stock_ops.predict import PredictionLog, predict_latest, walk_forward
 from stock_ops.report import build_report, render_report
@@ -72,6 +72,17 @@ def main() -> int:
             log.info("快照 %d 只，来源 %s", n, src)
         except Exception as e:
             log.error("快照失败，沿用上次缓存: %s", e)
+
+    # 基本面：持仓股与自选股，缓存超过 N 天重新抓取
+    try:
+        nf = update_fundamentals(
+            cache,
+            [c for c in codes if "." not in c],
+            max_age_days=int(cfg.data.get("fundamentals_max_age_days") or 7),
+        )
+        log.info("基本面更新 %d 只", nf)
+    except Exception as e:
+        log.error("基本面更新失败，沿用缓存: %s", e)
 
     # 预测：先验证昨日，再对每只股票做明日预测；首次见到的股票回填历史
     try:

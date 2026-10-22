@@ -4,6 +4,7 @@ data:
   provider_order: [baostock, akshare_tx, akshare_em]   # 历史K线数据源优先级
   request_interval: 0.3                                 # 每次请求后的休眠秒数
   max_retries: 3
+  fundamentals_max_age_days: 7   # 基本面缓存超过几天重新抓取
 
 screen:
   fundamental:
@@ -14,6 +15,9 @@ screen:
     turnover_min: 0.5         # 换手率下限（%）
     exclude_st: true
     min_listed_days: 250
+    roe_min: 8                # ROE 下限（%），财报缺失的不剔除
+    yoy_ni_min: 0             # 净利润同比下限（%）
+    liability_to_asset_max: 70   # 资产负债率上限（%）
   technical:
     ma_fast: 5
     ma_mid: 20
