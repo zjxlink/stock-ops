@@ -40,6 +40,20 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
+def _coerce_numbers(obj):
+    """YAML 1.1 把 5.0e9 这类写法解析为字符串，这里统一转回数字。"""
+    if isinstance(obj, dict):
+        return {k: _coerce_numbers(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_coerce_numbers(v) for v in obj]
+    if isinstance(obj, str):
+        try:
+            return float(obj) if any(ch in obj for ch in ".eE") else int(obj)
+        except ValueError:
+            return obj
+    return obj
+
+
 def _deep_merge(base: dict, override: dict) -> dict:
     out = dict(base)
     for k, v in override.items():
@@ -64,6 +78,8 @@ class Config:
             if p.exists():
                 with open(p, encoding="utf-8") as f:
                     raw = _deep_merge(DEFAULTS, yaml.safe_load(f) or {})
+                raw["screen"] = _coerce_numbers(raw["screen"])
+                raw["data"] = _coerce_numbers(raw["data"])
                 break
         return cls(raw=raw, root=root)
 

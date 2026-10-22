@@ -39,7 +39,18 @@ jobs:
           restore-keys: stock-ops-db-
 
       - name: Run daily job
-        run: python scripts/daily_job.py ${{ inputs.force && '--force' || '' }}
+        id: job
+        run: |
+          set -o pipefail
+          python scripts/daily_job.py ${{ inputs.force && '--force' || '' }} 2>&1 | tee job.log
+
+      - name: Post failure log as commit comment
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          { echo "### Daily report FAILED $(TZ=Asia/Shanghai date '+%F %R')"; echo; echo '```'; tail -c 6000 job.log; echo '```'; } > fail.md
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -F body=@fail.md > /dev/null
 
       - name: Commit report
         run: |

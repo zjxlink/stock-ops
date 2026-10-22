@@ -10,7 +10,7 @@ screen:
     pe_ttm_max: 40
     pe_ttm_min: 0
     pb_max: 8
-    total_mv_min: 5.0e9       # 总市值下限（元）
+    total_mv_min: 5.0e+9      # 总市值下限（元）
     turnover_min: 0.5         # 换手率下限（%）
     exclude_st: true
     min_listed_days: 250
