@@ -85,10 +85,12 @@ class BaostockProvider:
         df = pd.DataFrame(rows, columns=rs.fields).rename(
             columns={"code_name": "name", "tradeStatus": "trade_status"}
         )
+        raw = df["code"].astype(str)
+        # 只保留沪深 A 股：上海 60/68 开头，深圳 00/30 开头；排除 sh.000xxx / sz.399xxx 指数与基金债券
+        mask = raw.str.match(r"^sh\.(60|68)\d{4}$") | raw.str.match(r"^sz\.(00|30)\d{4}$")
+        df = df[mask].copy()
         df["code"] = df["code"].map(normalize_code)
-        # 只保留沪深 A 股代码段，排除指数、基金、债券
-        mask = df["code"].str.match(r"^(60|68|00|30)\d{4}$")
-        return df[mask][["code", "name", "trade_status"]].reset_index(drop=True)
+        return df.drop_duplicates("code")[["code", "name", "trade_status"]].reset_index(drop=True)
 
     def latest_valuation(self, code: str, lookback_days: int = 10) -> dict | None:
         """最近一个交易日的收盘、涨跌幅、换手、PE(TTM)、PB(MRQ)。"""

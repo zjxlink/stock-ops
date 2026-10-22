@@ -16,6 +16,7 @@ from stock_ops.analysis import fundamental_screen, technical_signals
 from stock_ops.data import Cache, Fetcher
 from stock_ops.data.akshare_provider import AkshareEmProvider, AkshareTxProvider
 from stock_ops.data.baostock_provider import BaostockProvider
+from stock_ops.data.tencent_provider import TencentQuoteProvider, sina_universe
 
 CODE = "600519"
 START = (date.today() - timedelta(days=200)).isoformat()
@@ -77,14 +78,19 @@ def main() -> int:
         "baostock.snapshot(5)", lambda: bs2.snapshot(codes=SMOKE_CODES)
     )
     bs2.close()
-    # 探针：数据中心 IP 下哪些行情源还能用（用于补市值字段）
-    probe("qt.gtimg.cn", "https://qt.gtimg.cn/q=sh600519")
-    probe(
-        "hq.sinajs.cn",
-        "https://hq.sinajs.cn/list=sh600519",
-        headers={"Referer": "https://finance.sina.com.cn"},
+    tq = TencentQuoteProvider()
+    results["tencent.snapshot(5)"] = check(
+        "tencent.snapshot(5)", lambda: tq.snapshot(codes=SMOKE_CODES)
     )
-    probe("akshare.stock_zh_a_spot(sina)", None, fn=lambda: __import__("akshare").stock_zh_a_spot())
+    try:
+        row = tq.quotes(["600519"]).iloc[0]
+        say(
+            f"       600519 核对: 价 {row['price']} PE {row['pe_ttm']} PB {row['pb']} "
+            f"总市值 {row['total_mv'] / 1e8:.0f} 亿 换手 {row['turnover']}%"
+        )
+    except Exception as e:
+        say(f"       600519 核对失败: {e}")
+    probe("sina universe", None, fn=sina_universe)
 
     # 完整流程：Fetcher 自动切换 -> 缓存 -> 信号 -> 筛选
     db = Path(args.db) if args.db else Path(tempfile.mkdtemp()) / "smoke.db"
