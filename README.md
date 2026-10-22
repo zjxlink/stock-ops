@@ -7,7 +7,7 @@
 | 模块 | 说明 |
 |---|---|
 | 数据 | Baostock 为历史日K主源，AKShare 腾讯 / 东方财富接口自动兜底；全市场快照来自 AKShare。所有数据增量缓存到 SQLite，分析时不发网络请求 |
-| 基本面筛选 | 按 PE、PB、市值、换手率硬过滤，自动剔除 ST |
+| 基本面筛选 | 按 PE、PB、市值、换手率硬过滤，自动剔除 ST；合并 Baostock 季度财报后再按 ROE、净利润增速、负债率过滤，按质量综合分排序 |
 | 技术面信号 | 均线多头、金叉、MACD、RSI、量比、20 日新高、布林收口，综合打分排序 |
 | 持仓管理 | 记录买卖流水，移动加权成本，浮盈 / 已实现盈亏 / 仓位占比 |
 | 操作计划 | 每日给出下一交易日每只持仓股 / 自选股的动作（卖出 / 买入 / 持有 / 观望）、挂单价、止损价、出场位与进场位 |
@@ -80,6 +80,8 @@ GitHub Actions 工作流：
 | Daily report | 工作日 18:30 / 手动 | 更新数据、生成日报和看板、提交并发布到 GitHub Pages |
 | Intraday refresh | 交易时段每 10 分钟 / 手动 | 用腾讯实时行情刷新看板现价与盈亏，只发布不提交 |
 | Trade entry | 新建 Issue | 解析交易指令写入 trades.csv，回复并关闭 Issue，触发看板刷新 |
+| Fundamentals weekly | 周日 10:00 / 手动 | 全市场季度财务指标更新，约 20 分钟，超时可续跑 |
+| Parameter sweep | 手动 | 策略 × ATR 倍数 × 大盘过滤 参数扫描，结果写成 commit 评论 |
 
 ## 目录结构
 
@@ -94,6 +96,8 @@ stock_ops/
   report/              日报组装、Markdown 日报、静态 HTML 看板
   cli.py               命令行入口
 scripts/daily_job.py   每日盘后任务
+scripts/fundamentals_job.py  全市场基本面周更
+scripts/sweep.py       参数扫描
 scripts/intraday_job.py  盘中实时刷新
 scripts/trade_from_issue.py  Issue 录入交易
 scripts/smoke_live.py  真实数据冒烟测试
