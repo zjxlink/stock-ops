@@ -24,6 +24,21 @@ def _table(df: pd.DataFrame, cols: list[str], max_rows: int = 30) -> str:
     return head + body
 
 
+def render_report(rd) -> str:
+    """由 ReportData 生成 Markdown 日报（推荐入口）。"""
+    return daily_report(
+        rd.date,
+        rd.portfolio,
+        rd.signals,
+        rd.screened,
+        rd.backtest,
+        rd.backtest_note,
+        rd.plan,
+        rd.plan_note,
+        getattr(rd, "strategy_compare", None),
+    )
+
+
 def daily_report(
     date: str,
     portfolio: pd.DataFrame,
@@ -33,6 +48,7 @@ def daily_report(
     backtest_note: str = "",
     plan: pd.DataFrame | None = None,
     plan_note: str = "",
+    strategy_compare: pd.DataFrame | None = None,
 ) -> str:
     parts = [f"# 每日报告 {date}\n"]
     if plan is not None and not plan.empty:
@@ -128,6 +144,25 @@ def daily_report(
                     "win_rate",
                     "profit_factor",
                     "avg_days",
+                ],
+            )
+        )
+    if strategy_compare is not None and not strategy_compare.empty:
+        parts.append("\n### 各策略平均表现（同一批股票）\n")
+        parts.append(
+            _table(
+                strategy_compare,
+                [
+                    "strategy",
+                    "description",
+                    "total_return",
+                    "buy_hold",
+                    "excess",
+                    "max_drawdown",
+                    "sharpe",
+                    "trades",
+                    "win_rate",
+                    "profit_factor",
                 ],
             )
         )

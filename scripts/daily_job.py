@@ -18,7 +18,7 @@ from stock_ops.data import Cache, Fetcher
 from stock_ops.data.baostock_provider import BaostockProvider
 from stock_ops.data.fetch import build_providers
 from stock_ops.portfolio import TradeBook
-from stock_ops.report import build_report, daily_report
+from stock_ops.report import build_report, render_report
 from stock_ops.report.html import write_site
 
 log = logging.getLogger("daily")
@@ -71,9 +71,7 @@ def main() -> int:
     rd = build_report(cfg, cache, today)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    text = daily_report(
-        rd.date, rd.portfolio, rd.signals, rd.screened, rd.backtest, rd.backtest_note
-    )
+    text = render_report(rd)
     (out / f"{today}.md").write_text(text, encoding="utf-8")
     (out / "latest.md").write_text(text, encoding="utf-8")
     log.info("日报已写入 %s", out / f"{today}.md")

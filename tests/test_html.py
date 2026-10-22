@@ -48,3 +48,24 @@ def test_build_report_live_prices(tmp_path, snapshot):
     assert "盘中实时 10:30" in write_site(rd, cache, cfg, tmp_path / "site").read_text(
         encoding="utf-8"
     )
+
+
+def test_render_report_includes_plan_and_compare(tmp_path, snapshot):
+    from stock_ops.report import render_report
+
+    cache = Cache(tmp_path / "db.sqlite")
+    cache.upsert_daily(make_daily("600001", n=400))
+    cache.replace_snapshot(snapshot, "2026-10-22T18:00:00")
+    TradeBook(tmp_path / "trades.csv").add("600001", "2025-06-01", "buy", 10, 100)
+    cfg = Config(
+        raw={
+            **Config().raw,
+            "portfolio": {"trades_path": "trades.csv"},
+            "backtest": {**Config().raw["backtest"], "start": "2025-01-01"},
+        },
+        root=tmp_path,
+    )
+    rd = build_report(cfg, cache, "2026-10-22")
+    md = render_report(rd)
+    assert "下一交易日操作计划" in md and "策略回测" in md and "各策略平均表现" in md
+    assert rd.plan.iloc[0]["code"] == "600001" and len(rd.strategy_compare) == 5

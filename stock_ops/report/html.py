@@ -255,6 +255,26 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
                 ("avg_days", "平均持有天", "num"),
             ],
         )
+    cmp_html = ""
+    if rd.strategy_compare is not None and not rd.strategy_compare.empty:
+        cmp_html = (
+            '<h3 style="font-size:15px;margin:18px 0 8px">各策略平均表现（同一批股票）</h3>'
+            + _table(
+                rd.strategy_compare,
+                [
+                    ("strategy", "策略", "text"),
+                    ("description", "规则", "text"),
+                    ("total_return", "总收益%", "pct"),
+                    ("buy_hold", "买入持有%", "pct"),
+                    ("excess", "超额%", "pct"),
+                    ("max_drawdown", "最大回撤%", "num"),
+                    ("sharpe", "夏普", "num"),
+                    ("trades", "交易次数", "num"),
+                    ("win_rate", "胜率%", "num"),
+                    ("profit_factor", "盈亏比", "num"),
+                ],
+            )
+        )
     gen = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M")
     issue_url = f"https://github.com/{repo}/issues/new?template=trade.yml&title=%E5%BD%95%E5%85%A5%E4%BA%A4%E6%98%93"
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -266,7 +286,7 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
 <h2>持仓</h2>{tiles}{pf_html}
 <h2>自选股与持仓股技术信号</h2>{sig_html}
 <h2>基本面筛选</h2>{scr_note}{scr_html}
-{"<h2>策略回测</h2>" + bt_note + bt_html if bt_html else ""}
+{"<h2>策略回测</h2>" + bt_note + bt_html + cmp_html if bt_html else ""}
 <footer>数据来源：Baostock、腾讯行情、东方财富。仅供个人研究，不构成投资建议。</footer>
 </main><script>{_JS}</script></body></html>"""
 

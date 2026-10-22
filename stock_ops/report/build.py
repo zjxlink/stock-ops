@@ -9,7 +9,7 @@ import pandas as pd
 from ..analysis import fundamental_screen, technical_signals
 from ..analysis.plan import build_plan
 from ..analysis.technical import rank_signals
-from ..backtest import get_strategy, run_many
+from ..backtest import STRATEGIES, get_strategy, run_many
 from ..config import Config
 from ..data import Cache
 from ..portfolio import TradeBook, portfolio_summary, positions_from_trades
@@ -29,6 +29,7 @@ class ReportData:
     equity_curves: dict[str, list[float]] | None = None
     plan: pd.DataFrame | None = None
     plan_note: str = ""
+    strategy_compare: pd.DataFrame | None = None
 
 
 def build_report(
@@ -97,4 +98,33 @@ def build_report(
             + (f"，止损 {sl * 100:.0f}%" if sl else "")
         )
         rd.equity_curves = {c: r.equity.tolist() for c, r in results.items()}
+        rows = []
+        for name, st in STRATEGIES.items():
+            t = (
+                table
+                if name == strat.name
+                else run_many(
+                    {c: cache.daily(c, start=str(cfg.backtest["start"])) for c in codes},
+                    st,
+                    cfg.backtest_config(),
+                )[0]
+            )
+            if not t.empty:
+                avg = t[t["code"] == "平均"].iloc[0].to_dict()
+                rows.append(
+                    {
+                        "strategy": name,
+                        "description": st.description,
+                        **{
+                            k: v
+                            for k, v in avg.items()
+                            if k not in ("code", "name", "start", "end")
+                        },
+                    }
+                )
+        rd.strategy_compare = (
+            pd.DataFrame(rows).sort_values("total_return", ascending=False).reset_index(drop=True)
+            if rows
+            else None
+        )
     return rd

@@ -19,7 +19,7 @@ from .config import Config
 from .data import Cache, Fetcher, normalize_code
 from .data.fetch import build_providers
 from .portfolio import TradeBook, portfolio_summary, positions_from_trades
-from .report import build_report, daily_report
+from .report import build_report, render_report
 
 app = typer.Typer(help="个人 A 股分析操作系统", no_args_is_help=True)
 trade_app = typer.Typer(help="交易流水与持仓")
@@ -223,9 +223,7 @@ def report(
     today = date.today().isoformat()
     rd = build_report(cfg, cache, today)
     out.mkdir(parents=True, exist_ok=True)
-    text = daily_report(
-        rd.date, rd.portfolio, rd.signals, rd.screened, rd.backtest, rd.backtest_note
-    )
+    text = render_report(rd)
     (out / f"{today}.md").write_text(text, encoding="utf-8")
     (out / "latest.md").write_text(text, encoding="utf-8")
     from .report.html import write_site
