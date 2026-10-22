@@ -39,7 +39,7 @@ DEFAULTS: dict[str, Any] = {
     "plan": {"capital": 100000, "position_pct": 0.2, "rules": {}, "trailing_from": None},
     "market": {"index": "sh.000300", "ma": 60},
     "backtest": {
-        "strategy": "ma_bull",
+        "strategy": "donchian",
         "start": "2019-01-01",
         "initial_cash": 100000,
         "commission": 0.0003,
@@ -48,7 +48,7 @@ DEFAULTS: dict[str, Any] = {
         "slippage": 0.001,
         "stop_loss": None,
         "trailing_stop": None,
-        "atr_stop": 3.0,
+        "atr_stop": 2.0,
         "min_hold_days": 5,
         "cooldown_days": 10,
         "take_profit": None,

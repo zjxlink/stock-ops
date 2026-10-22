@@ -33,7 +33,7 @@ def test_stock_rule_lookup(tmp_path):
     assert cfg.stock_rule("600519") == {}
     bc = cfg.backtest_config()
     assert (
-        bc.atr_stop == 3.0
+        bc.atr_stop == 2.0
         and bc.trailing_stop is None
         and bc.min_hold_days == 5
         and cfg.market["index"] == "sh.000300"

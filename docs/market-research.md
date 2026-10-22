@@ -82,3 +82,18 @@
 - [A 股量化数据接口怎么选](https://developer.cloud.tencent.com/article/2738002)
 - [AKShare GitHub Issues](https://github.com/akfamily/akshare/issues)
 - [KHunter](https://github.com/ling-0729/KHunter)、[Sequoia](https://github.com/sngyai/Sequoia)、[daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis)、[go-stock](https://github.com/arvinlovegood/go-stock)、[qstock](https://github.com/tkfy920/qstock)
+
+## 7. 回测参数扫描结论（2026-10-22，6 只持仓与自选股，2019 年起）
+
+| 组合 | 总收益 | 平均最大回撤 | 单只最差回撤 | 交易次数/只 |
+|---|---|---|---|---|
+| 原默认：均线多头，无过滤，15% 移动止损 | 13.6% | -45.9% | -78% | 58 |
+| **海龟 donchian + ATR 2 倍 + 沪深300 60 日线过滤** | 42.7% | **-31.0%** | **-46.8%** | 12 |
+| 20 日突破 + ATR 2 倍 + 60 日线过滤 | 57.7% | -32.1% | -61.5% | 20 |
+| 海龟 + ATR 2 倍，无过滤 | 61.3% | -33.1% | -63.4% | 14 |
+| 同批股票买入持有 | 124.2% | 未统计 | 未统计 | 0 |
+
+- ATR 2 倍在所有策略上都优于 3 倍和 4 倍；止损越松回撤越大、收益不升。
+- 大盘 60 日线过滤对平均回撤改善有限（1 到 3 个百分点），但对单只最差回撤改善明显（海龟从 -63% 到 -47%）。120 日线不如 60 日线。
+- 所有组合都跑输买入持有，原因是这批股票里有两只 7 年涨 2.6 到 4.3 倍的大牛股，任何止损策略都会在中途被甩下车。
+- 选择 donchian + ATR 2 + 60 日线作为默认，因为目标是压回撤而不是追收益。完整扫描表见仓库 commit 评论（Parameter sweep 工作流）。

@@ -34,7 +34,7 @@ market:
   ma: 60                    # 指数收盘低于该均线时不开新仓；设 0 关闭过滤
 
 backtest:
-  strategy: ma_bull         # 可选: ma_bull / golden_cross / macd / breakout20 / score / trend60 / donchian
+  strategy: donchian        # 可选: ma_bull / golden_cross / macd / breakout20 / score / trend60 / donchian
   start: "2019-01-01"
   initial_cash: 100000
   commission: 0.0003        # 佣金率（双边）
@@ -43,7 +43,7 @@ backtest:
   slippage: 0.001           # 单边滑点
   stop_loss:                # 成本止损，如 0.08 = 收盘低于成本 8% 次日卖出；留空不启用
   trailing_stop:            # 百分比跟踪止损，如 0.15；留空不启用（默认用 ATR 跟踪止损）
-  atr_stop: 3.0             # ATR 跟踪止损：止损线 = 持仓期间最高收盘 - 3 倍 ATR，只升不降；留空不启用
+  atr_stop: 2.0             # ATR 跟踪止损：止损线 = 持仓期间最高收盘 - 2 倍 ATR，只升不降；留空不启用
   min_hold_days: 5          # 最少持仓天数内忽略信号出场（止损仍有效）
   cooldown_days: 10         # 止损出局后冷却天数内不重新进场
   take_profit:              # 止盈，如 0.3；留空不启用
