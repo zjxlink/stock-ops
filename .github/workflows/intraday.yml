@@ -1,0 +1,44 @@
+name: Intraday refresh
+
+# 交易时段每 10 分钟刷新看板上的现价与盈亏（北京时间 9:30-11:30、13:00-15:00，工作日）。
+# 只发布看板，不提交代码。非交易日由脚本跳过。
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30,40,50 1 * * 1-5"      # 09:30 09:40 09:50
+    - cron: "*/10 2 * * 1-5"          # 10:00 - 10:50
+    - cron: "0,10,20,30 3 * * 1-5"    # 11:00 - 11:30
+    - cron: "*/10 5-6 * * 1-5"        # 13:00 - 14:50
+    - cron: "0 7 * * 1-5"             # 15:00 收盘
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: intraday
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - uses: actions/cache/restore@v4
+        with:
+          path: data/stock_ops.db
+          key: stock-ops-db-
+          restore-keys: stock-ops-db-
+      - run: python scripts/intraday_job.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4

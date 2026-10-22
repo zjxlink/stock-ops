@@ -9,6 +9,7 @@ import html
 import math
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -203,12 +204,12 @@ def render_site(rd: ReportData, cache: Cache, cfg: Config, repo: str | None = No
         max_rows=150,
     )
 
-    gen = datetime.now().strftime("%Y-%m-%d %H:%M")
+    gen = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M")
     issue_url = f"https://github.com/{repo}/issues/new?template=trade.yml&title=%E5%BD%95%E5%85%A5%E4%BA%A4%E6%98%93"
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>stock-ops 看板</title><style>{_CSS}</style></head><body><main>
 <h1>stock-ops 看板 <span class="sub">{html.escape(rd.date)}</span></h1>
-<p class="sub">快照更新：{html.escape(rd.snapshot_updated_at or "无")} · 页面生成：{gen} · <a href="https://github.com/{repo}/tree/main/reports">日报归档</a></p>
+<p class="sub">现价：{html.escape(rd.price_note)} · 快照更新：{html.escape(rd.snapshot_updated_at or "无")} · 页面生成：{gen} · <a href="https://github.com/{repo}/tree/main/reports">日报归档</a></p>
 <p><a class="btn" href="{issue_url}">录入交易</a> <span class="sub">通过 GitHub Issue 提交，几分钟后自动写入流水并刷新本页。</span></p>
 <h2>持仓</h2>{tiles}{pf_html}
 <h2>自选股与持仓股技术信号</h2>{sig_html}
