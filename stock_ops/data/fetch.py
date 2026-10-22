@@ -13,6 +13,7 @@ from .akshare_provider import AkshareEmProvider
 from .baostock_provider import BaostockProvider
 from .base import DataProvider, empty_daily
 from .cache import Cache
+from .tencent_provider import TencentQuoteProvider
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class Fetcher:
         self,
         cache: Cache,
         providers: list[DataProvider] | None = None,
-        snapshot_provider: DataProvider | None = None,
+        snapshot_providers: list | None = None,
         request_interval: float = 0.3,
         max_retries: int = 3,
     ) -> None:
@@ -42,7 +43,12 @@ class Fetcher:
             if providers is not None
             else build_providers(["baostock", "akshare_tx", "akshare_em"])
         )
-        self.snapshot_provider = snapshot_provider or AkshareEmProvider()
+        # 快照源顺序：东财（快，家庭网络可用）-> 腾讯批量（数据中心可用）-> baostock 逐只（最慢最稳）
+        self.snapshot_providers = (
+            snapshot_providers
+            if snapshot_providers is not None
+            else [AkshareEmProvider(), TencentQuoteProvider(), BaostockProvider()]
+        )
         self.request_interval = request_interval
         self.max_retries = max_retries
         self.snapshot_codes: list[str] | None = None  # 限定 baostock 快照范围（None 为全市场）
@@ -104,27 +110,24 @@ class Fetcher:
         return result
 
     def update_snapshot(self) -> tuple[int, str]:
-        """先试 snapshot_provider（东财，快），失败后退化为 Baostock 逐只拼接（慢但稳）。返回 (只数, 来源)。"""
-        try:
-            df = self._with_retry(self.snapshot_provider.snapshot)
-            source = self.snapshot_provider.name
-        except Exception as e:
-            log.warning(
-                "快照源 %s 失败，退化为 baostock 逐只拼接: %s", self.snapshot_provider.name, e
-            )
-            bs = (
-                next((p for p in self.providers if isinstance(p, BaostockProvider)), None)
-                or BaostockProvider()
-            )
-            df = bs.snapshot(
-                codes=self.snapshot_codes,
-                progress=lambda i, n: log.info("baostock 快照 %d/%d", i, n),
-            )
-            source = "baostock"
-        n = self.cache.replace_snapshot(
-            df, updated_at=pd.Timestamp.now().isoformat(timespec="seconds")
-        )
-        return n, source
+        """按 snapshot_providers 顺序尝试，返回 (只数, 来源)。snapshot_codes 可限定范围（东财始终全市场）。"""
+        last: Exception | None = None
+        for p in self.snapshot_providers:
+            try:
+                if isinstance(p, AkshareEmProvider):
+                    df = self._with_retry(p.snapshot)
+                else:
+                    df = self._with_retry(p.snapshot, self.snapshot_codes)
+                if df is None or df.empty:
+                    raise RuntimeError("返回空快照")
+                n = self.cache.replace_snapshot(
+                    df, updated_at=pd.Timestamp.now().isoformat(timespec="seconds")
+                )
+                return n, p.name
+            except Exception as e:
+                last = e
+                log.warning("快照源 %s 失败，切换下一个: %s", p.name, e)
+        raise RuntimeError(f"所有快照源均失败: {last}")
 
 
 __all__ = ["Fetcher", "build_providers", "empty_daily"]

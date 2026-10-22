@@ -66,24 +66,27 @@ class BaostockProvider:
             df[col] = pd.to_numeric(df[col], errors="coerce")
         return df[DAILY_COLUMNS]
 
-    def stock_list(self, day: str | None = None) -> pd.DataFrame:
-        """某交易日全部 A 股代码与名称（含指数，调用方自行过滤）。"""
+    def stock_list(self, day: str | None = None, lookback_days: int = 10) -> pd.DataFrame:
+        """全部 A 股代码与名称。当天数据盘后才生成，因此从 day 起向前回退到最近有数据的交易日。"""
         bs = self._ensure_login()
-        rs = bs.query_all_stock(day=day or "")
-        if rs.error_code != "0":
-            raise ConnectionError(f"baostock query_all_stock failed: {rs.error_msg}")
-        rows = []
-        while rs.next():
-            rows.append(rs.get_row_data())
-        df = (
-            pd.DataFrame(rows, columns=rs.fields)
-            if rows
-            else pd.DataFrame(columns=["code", "tradeStatus", "code_name"])
+        d0 = date.fromisoformat(day) if day else date.today()
+        for back in range(lookback_days):
+            d = (d0 - timedelta(days=back)).isoformat()
+            rs = bs.query_all_stock(day=d)
+            if rs.error_code != "0":
+                raise ConnectionError(f"baostock query_all_stock failed: {rs.error_msg}")
+            rows = []
+            while rs.next():
+                rows.append(rs.get_row_data())
+            if rows:
+                break
+        else:
+            return pd.DataFrame(columns=["code", "name", "trade_status"])
+        df = pd.DataFrame(rows, columns=rs.fields).rename(
+            columns={"code_name": "name", "tradeStatus": "trade_status"}
         )
-        df = df.rename(columns={"code_name": "name", "tradeStatus": "trade_status"})
-        df["prefix"] = df["code"].str.slice(0, 2)
         df["code"] = df["code"].map(normalize_code)
-        # 只保留沪深 A 股主板/创业板/科创板代码段，排除指数、基金、债券
+        # 只保留沪深 A 股代码段，排除指数、基金、债券
         mask = df["code"].str.match(r"^(60|68|00|30)\d{4}$")
         return df[mask][["code", "name", "trade_status"]].reset_index(drop=True)
 
