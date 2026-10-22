@@ -141,7 +141,8 @@ def test_min_hold_days_ignores_early_signal_exit():
 
 def test_cooldown_after_stop_blocks_reentry():
     df = _flat(n=200, price=10.0)
-    df.loc[110:, ["open", "high", "low", "close"]] = 9.0
+    df.loc[110:, ["open", "high", "low", "close"]] = 9.0  # 第一次止损
+    df.loc[150:, ["open", "high", "low", "close"]] = 8.0  # 第二次止损，让第二笔交易落地
     cfg = BacktestConfig(
         stop_loss=0.05, atr_stop=None, cooldown_days=10, slippage=0, min_commission=0
     )
@@ -149,8 +150,8 @@ def test_cooldown_after_stop_blocks_reentry():
     r = run_backtest(df, Strategy("t", "", always, lambda x: pd.Series(False, index=x.index)), cfg)
     assert r.trades[0].reason == "stop_loss" and r.trades[0].exit_date == df["date"][111]
     assert (
-        len(r.trades) >= 2 and r.trades[1].entry_date == df["date"][122]
-    )  # 111 出局，冷却 10 天后 121 收盘信号，122 开盘进
+        len(r.trades) == 2 and r.trades[1].entry_date == df["date"][122]
+    )  # 111 出局，冷却 10 天，121 收盘信号，122 开盘进
 
 
 def test_regime_blocks_entries():

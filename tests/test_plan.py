@@ -90,7 +90,7 @@ def test_trailing_stop_in_plan_uses_peak_since_entry():
     )
     peak = df["close"].iloc[140:].max()
     assert abs(row["trail_price"] - round(peak * 0.85, 2)) < 1e-6
-    assert row["action"] == "卖出" and "移动止损" in row["reason"]
+    assert row["action"] == "卖出" and "跟踪止损" in row["reason"]
 
 
 def test_per_stock_rule_overrides_trailing():

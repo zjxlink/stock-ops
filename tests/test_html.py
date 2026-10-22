@@ -69,4 +69,4 @@ def test_render_report_includes_plan_and_compare(tmp_path, snapshot):
     md = render_report(rd)
     assert "下一交易日操作计划" in md and "策略回测" in md and "各策略平均表现" in md
     assert "trail_price" in md and "ATR" in rd.backtest_note
-    assert rd.plan.iloc[0]["code"] == "600001" and len(rd.strategy_compare) == 5
+    assert rd.plan.iloc[0]["code"] == "600001" and len(rd.strategy_compare) == 7

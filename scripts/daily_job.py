@@ -53,6 +53,8 @@ def main() -> int:
         max_retries=cfg.data["max_retries"],
     )
     codes = sorted(set(cfg.watchlist) | set(TradeBook(cfg.trades_path).codes()))
+    if cfg.market.get("index"):
+        codes.append(str(cfg.market["index"]))  # 大盘过滤用的指数
     log.info("更新 %d 只: %s", len(codes), " ".join(codes))
     res = f.update_many(codes)
     failed = [c for c, n in res.items() if n < 0]
