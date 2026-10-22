@@ -6,6 +6,8 @@ import math
 
 import pandas as pd
 
+INT_COLS = {"shares", "trades", "score"}
+
 
 def _table(df: pd.DataFrame, cols: list[str], max_rows: int = 30) -> str:
     if df is None or df.empty:
@@ -15,9 +17,11 @@ def _table(df: pd.DataFrame, cols: list[str], max_rows: int = 30) -> str:
     body = ""
     for row in d.itertuples(index=False):
         cells = []
-        for v in row:
+        for col, v in zip(d.columns, row, strict=True):
             if isinstance(v, float):
-                cells.append("" if math.isnan(v) else f"{v:,.2f}")
+                cells.append(
+                    "" if math.isnan(v) else (f"{int(v):,}" if col in INT_COLS else f"{v:,.2f}")
+                )
             else:
                 cells.append(str(v))
         body += "| " + " | ".join(cells) + " |\n"
