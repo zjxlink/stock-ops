@@ -77,6 +77,20 @@ STRATEGIES: dict[str, Strategy] = {
         entry=lambda x: _score(x) >= 4,
         exit=lambda x: (_score(x) <= 0) | (x["close"] < x["ma20"]),
     ),
+    "trend60": Strategy(
+        "trend60",
+        "趋势：均线多头且创 20 日新高进场，收盘跌破 60 日线出场",
+        entry=lambda x: (
+            (x["ma5"] > x["ma20"]) & (x["ma20"] > x["ma60"]) & (x["close"] >= x["high20"].shift(1))
+        ),
+        exit=lambda x: x["close"] < x["ma60"],
+    ),
+    "donchian": Strategy(
+        "donchian",
+        "海龟：收盘创 55 日新高进场，收盘跌破 20 日低点出场",
+        entry=lambda x: x["close"] >= x["high55"].shift(1),
+        exit=lambda x: x["close"] <= x["low20"].shift(1),
+    ),
 }
 
 

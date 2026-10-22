@@ -37,6 +37,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "portfolio": {"trades_path": "data/trades.csv"},
     "plan": {"capital": 100000, "position_pct": 0.2, "rules": {}, "trailing_from": None},
+    "market": {"index": "sh.000300", "ma": 60},
     "backtest": {
         "strategy": "ma_bull",
         "start": "2019-01-01",
@@ -46,7 +47,10 @@ DEFAULTS: dict[str, Any] = {
         "stamp_duty": 0.0005,
         "slippage": 0.001,
         "stop_loss": None,
-        "trailing_stop": 0.15,
+        "trailing_stop": None,
+        "atr_stop": 3.0,
+        "min_hold_days": 5,
+        "cooldown_days": 10,
         "take_profit": None,
     },
     "watchlist": [],
@@ -95,6 +99,7 @@ class Config:
                 raw["data"] = _coerce_numbers(raw["data"])
                 raw["backtest"] = _coerce_numbers(raw.get("backtest", {}))
                 raw["plan"] = _coerce_numbers(raw.get("plan", {}))
+                raw["market"] = _coerce_numbers(raw.get("market", {}))
                 break
         return cls(raw=raw, root=root)
 
@@ -130,6 +135,10 @@ class Config:
         return dict(rules.get(str(code).zfill(6)) or rules.get(int(code)) or {}) if rules else {}
 
     @property
+    def market(self) -> dict[str, Any]:
+        return self.raw["market"]
+
+    @property
     def backtest(self) -> dict[str, Any]:
         return self.raw["backtest"]
 
@@ -144,6 +153,10 @@ class Config:
             stamp_duty=float(b["stamp_duty"]),
             slippage=float(b["slippage"]),
             stop_loss=b.get("stop_loss") or None,
+            trailing_stop=b.get("trailing_stop") or None,
+            atr_stop=b.get("atr_stop") or None,
+            min_hold_days=int(b.get("min_hold_days") or 0),
+            cooldown_days=int(b.get("cooldown_days") or 0),
             take_profit=b.get("take_profit") or None,
         )
 

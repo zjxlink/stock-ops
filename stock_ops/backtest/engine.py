@@ -22,7 +22,10 @@ class BacktestConfig:
     stamp_duty: float = 0.0005  # 卖出印花税
     slippage: float = 0.001  # 单边滑点
     stop_loss: float | None = None  # 0.08 = 收盘低于成本 8% 次日止损
-    trailing_stop: float | None = 0.15  # 收盘自持仓期间最高收盘回撤 15% 次日止损
+    trailing_stop: float | None = None  # 百分比跟踪止损：收盘自持仓期间最高收盘回撤 x 次日止损
+    atr_stop: float | None = 3.0  # ATR 跟踪止损：止损线 = 最高收盘 - k*ATR，只升不降
+    min_hold_days: int = 5  # 最少持仓天数内忽略信号出场（止损仍有效）
+    cooldown_days: int = 10  # 止损出局后冷却天数内不重新进场
     take_profit: float | None = None
     lot: int = 100  # 整手
     warmup: int = 60  # 指标预热期，之前不交易
@@ -60,8 +63,21 @@ def _fee_sell(amount: float, cfg: BacktestConfig) -> float:
     return max(amount * cfg.commission, cfg.min_commission) + amount * cfg.stamp_duty
 
 
+def market_regime(index_df: pd.DataFrame | None, ma: int = 60) -> pd.Series | None:
+    """大盘过滤：指数收盘高于 ma 日均线为 True。返回按日期(str)索引的布尔序列；无数据返回 None。"""
+    if index_df is None or index_df.empty or not ma or len(index_df) < ma:
+        return None
+    d = index_df.sort_values("date")
+    close = d["close"].astype(float)
+    ok = close > close.rolling(ma, min_periods=ma).mean()
+    return pd.Series(ok.to_numpy(), index=d["date"].astype(str).to_numpy())
+
+
 def run_backtest(
-    df: pd.DataFrame, strategy: Strategy, cfg: BacktestConfig | None = None
+    df: pd.DataFrame,
+    strategy: Strategy,
+    cfg: BacktestConfig | None = None,
+    regime: pd.Series | None = None,
 ) -> BacktestResult:
     cfg = cfg or BacktestConfig()
     if df is None or len(df) < cfg.warmup + 5:
@@ -75,8 +91,15 @@ def run_backtest(
         x["date"].astype(str).to_numpy(),
     )
     code = str(x["code"].iloc[0])
+    atr = x["atr"].to_numpy(float)
+    if regime is not None:
+        reg_map = regime.to_dict()
+        regime_ok = np.array([bool(reg_map.get(d, True)) for d in dates])
+    else:
+        regime_ok = np.ones(len(x), dtype=bool)
 
     cash, shares, cost_price, entry_i, peak = cfg.initial_cash, 0, 0.0, -1, 0.0
+    stop_level, last_exit_i, last_exit_reason = 0.0, -(10**9), ""
     pending: str | None = None  # 次日开盘要执行的动作：buy / sell:<reason>
     equity = np.empty(len(x))
     trades: list[Trade] = []
@@ -90,7 +113,7 @@ def run_backtest(
             if qty > 0:
                 amt = qty * px
                 cash -= amt + _fee_buy(amt, cfg)
-                shares, cost_price, entry_i, peak = qty, px, i, 0.0
+                shares, cost_price, entry_i, peak, stop_level = qty, px, i, 0.0, 0.0
         elif pending and pending.startswith("sell") and shares > 0 and not math.isnan(o):
             px = o * (1 - cfg.slippage)
             amt = shares * px
@@ -109,7 +132,8 @@ def run_backtest(
                     pending.split(":", 1)[1],
                 )
             )
-            shares, cost_price, entry_i, peak = 0, 0.0, -1, 0.0
+            last_exit_i, last_exit_reason = i, pending.split(":", 1)[1]
+            shares, cost_price, entry_i, peak, stop_level = 0, 0.0, -1, 0.0, 0.0
         pending = None
         equity[i] = cash + shares * (c if not math.isnan(c) else 0.0)
         # 2) 收盘确认次日指令
@@ -117,16 +141,25 @@ def run_backtest(
             continue
         if shares > 0:
             peak = max(peak, c) if not math.isnan(c) else peak
+            if cfg.atr_stop and not math.isnan(atr[i]) and atr[i] > 0:
+                stop_level = max(stop_level, peak - cfg.atr_stop * atr[i])
+            held_days = i - entry_i
             if cfg.stop_loss and c <= cost_price * (1 - cfg.stop_loss):
                 pending = "sell:stop_loss"
             elif cfg.trailing_stop and peak > 0 and c <= peak * (1 - cfg.trailing_stop):
                 pending = "sell:trailing_stop"
+            elif cfg.atr_stop and stop_level > 0 and c <= stop_level:
+                pending = "sell:atr_stop"
             elif cfg.take_profit and c >= cost_price * (1 + cfg.take_profit):
                 pending = "sell:take_profit"
-            elif exit_[i]:
+            elif exit_[i] and held_days >= cfg.min_hold_days:
                 pending = "sell:signal"
-        elif entry[i]:
-            pending = "buy"
+        elif entry[i] and regime_ok[i]:
+            in_cooldown = (
+                last_exit_reason.endswith("stop") and (i - last_exit_i) < cfg.cooldown_days
+            )
+            if not in_cooldown:
+                pending = "buy"
 
     eq = pd.Series(equity, index=pd.Index(dates, name="date"))
     res = BacktestResult(code, strategy.name, dates[0], dates[-1], eq, trades)
@@ -178,13 +211,16 @@ def compute_metrics(
 
 
 def run_many(
-    daily_by_code: dict[str, pd.DataFrame], strategy: Strategy, cfg: BacktestConfig | None = None
+    daily_by_code: dict[str, pd.DataFrame],
+    strategy: Strategy,
+    cfg: BacktestConfig | None = None,
+    regime: pd.Series | None = None,
 ) -> tuple[pd.DataFrame, dict[str, BacktestResult]]:
     """对多只股票跑同一策略，返回汇总表（含均值行）与逐只结果。数据不足的股票跳过。"""
     rows, results = [], {}
     for code, df in daily_by_code.items():
         try:
-            r = run_backtest(df, strategy, cfg)
+            r = run_backtest(df, strategy, cfg, regime)
         except ValueError:
             continue
         results[code] = r

@@ -32,7 +32,13 @@ def test_fills_next_open_and_fees_are_charged():
     entry = lambda x: pd.Series(x.index == 100, index=x.index)  # noqa: E731
     exit_ = lambda x: pd.Series(x.index == 110, index=x.index)  # noqa: E731
     cfg = BacktestConfig(
-        initial_cash=100_000, commission=0.001, min_commission=0, stamp_duty=0.001, slippage=0
+        initial_cash=100_000,
+        commission=0.001,
+        min_commission=0,
+        stamp_duty=0.001,
+        slippage=0,
+        atr_stop=None,
+        min_hold_days=0,
     )
     r = run_backtest(df, Strategy("t", "", entry, exit_), cfg)
     assert len(r.trades) == 1
@@ -55,7 +61,7 @@ def test_stop_loss_triggers():
     df = _flat(n=200, price=10.0)
     df.loc[120:, ["open", "high", "low", "close"]] = 9.0  # 第 120 日起跌 10%
     entry = lambda x: pd.Series(x.index == 100, index=x.index)  # noqa: E731
-    cfg = BacktestConfig(stop_loss=0.08, slippage=0, min_commission=0)
+    cfg = BacktestConfig(stop_loss=0.08, atr_stop=None, slippage=0, min_commission=0)
     r = run_backtest(df, Strategy("t", "", entry, lambda x: pd.Series(False, index=x.index)), cfg)
     assert len(r.trades) == 1 and r.trades[0].reason == "stop_loss"
     assert r.trades[0].exit_date == df["date"][121]
@@ -103,7 +109,62 @@ def test_trailing_stop_triggers_from_peak():
     df.loc[110:119, ["open", "high", "low", "close"]] = 12.0  # 冲高到 12
     df.loc[120:, ["open", "high", "low", "close"]] = 10.0  # 回到 10：自高点回撤 16.7%
     entry = lambda x: pd.Series(x.index == 100, index=x.index)  # noqa: E731
-    cfg = BacktestConfig(stop_loss=None, trailing_stop=0.15, slippage=0, min_commission=0)
+    cfg = BacktestConfig(
+        stop_loss=None, trailing_stop=0.15, atr_stop=None, slippage=0, min_commission=0
+    )
     r = run_backtest(df, Strategy("t", "", entry, lambda x: pd.Series(False, index=x.index)), cfg)
     assert len(r.trades) == 1 and r.trades[0].reason == "trailing_stop"
     assert r.trades[0].exit_date == df["date"][121]
+
+
+def _sig(idx):
+    return lambda x: pd.Series(x.index.isin(idx), index=x.index)
+
+
+def test_atr_stop_ratchets_and_triggers():
+    df = make_daily("A", n=200, seed=5, trend=0.0)
+    cfg = BacktestConfig(atr_stop=1.0, slippage=0, min_commission=0, min_hold_days=0)
+    r = run_backtest(
+        df, Strategy("t", "", _sig([100]), lambda x: pd.Series(False, index=x.index)), cfg
+    )
+    assert len(r.trades) == 1 and r.trades[0].reason == "atr_stop"
+
+
+def test_min_hold_days_ignores_early_signal_exit():
+    df = _flat()
+    cfg = BacktestConfig(atr_stop=None, min_hold_days=10, slippage=0, min_commission=0)
+    r = run_backtest(df, Strategy("t", "", _sig([100]), _sig([103, 115])), cfg)
+    assert (
+        len(r.trades) == 1 and r.trades[0].exit_date == df["date"][116]
+    )  # 103 的信号被忽略，115 生效
+
+
+def test_cooldown_after_stop_blocks_reentry():
+    df = _flat(n=200, price=10.0)
+    df.loc[110:, ["open", "high", "low", "close"]] = 9.0
+    cfg = BacktestConfig(
+        stop_loss=0.05, atr_stop=None, cooldown_days=10, slippage=0, min_commission=0
+    )
+    always = lambda x: pd.Series(x.index >= 100, index=x.index)  # noqa: E731
+    r = run_backtest(df, Strategy("t", "", always, lambda x: pd.Series(False, index=x.index)), cfg)
+    assert r.trades[0].reason == "stop_loss" and r.trades[0].exit_date == df["date"][111]
+    assert (
+        len(r.trades) >= 2 and r.trades[1].entry_date == df["date"][122]
+    )  # 111 出局，冷却 10 天后 121 收盘信号，122 开盘进
+
+
+def test_regime_blocks_entries():
+    df = _flat()
+    regime = pd.Series(False, index=df["date"].astype(str).to_numpy())
+    r = run_backtest(
+        df,
+        Strategy("t", "", _sig([100]), lambda x: pd.Series(False, index=x.index)),
+        BacktestConfig(),
+        regime=regime,
+    )
+    assert r.trades == []
+    from stock_ops.backtest import market_regime
+
+    idx = make_daily("sh.000300", n=300, seed=9, trend=0.01)
+    reg = market_regime(idx, 60)
+    assert reg is not None and bool(reg.iloc[-1]) and market_regime(idx, 0) is None

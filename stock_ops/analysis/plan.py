@@ -56,6 +56,8 @@ def plan_for_code(
     stop_loss: float | None = None,
     trailing_stop: float | None = 0.15,
     trailing_from: str | None = None,
+    atr_stop: float | None = 3.0,
+    regime_ok: bool | None = None,
     take_profit: float | None = None,
     capital: float = 100_000.0,
     position_pct: float = 0.2,
@@ -66,6 +68,8 @@ def plan_for_code(
         stop_loss = rule["stop_loss"] or None
     if "trailing_stop" in rule:
         trailing_stop = rule["trailing_stop"] or None
+    if "atr_stop" in rule:
+        atr_stop = rule["atr_stop"] or None
     hold_mode = str(rule.get("mode", "rule")).lower() == "hold"
 
     row: dict[str, Any] = {k: float("nan") for k in PLAN_COLUMNS}
@@ -94,6 +98,15 @@ def plan_for_code(
         peak = float(since["close"].max()) if not since.empty else close
         stop_px = cost * (1 - stop_loss) if stop_loss else None
         trail_px = peak * (1 - trailing_stop) if trailing_stop else None
+        atr_px = None
+        if atr_stop and not since.empty:
+            run_peak = since["close"].astype(float).cummax()
+            atr_series = since["atr"].astype(float)
+            valid = atr_series > 0
+            if valid.any():
+                atr_px = float((run_peak[valid] - atr_stop * atr_series[valid]).max())  # 只升不降
+        # 表格里的跟踪止损列取两者中更高（更严格）的一条
+        trail_px = max(filter(None, [trail_px, atr_px]), default=None)
         tp = cost * (1 + take_profit) if take_profit else None
         row["stop_price"] = round(stop_px, 2) if stop_px else float("nan")
         row["trail_price"] = round(trail_px, 2) if trail_px else float("nan")
@@ -102,7 +115,7 @@ def plan_for_code(
             note = rule.get("note") or "长期持有"
             levels = f"参考位：20日线 {_f(ma20)}、60日线 {_f(ma60)}、近60日低点 {_f(low60)}"
             if trail_px:
-                levels += f"；移动止损参考 {_f(trail_px)}（自高点 {_f(peak)} 回撤 {trailing_stop * 100:.0f}%）"
+                levels += f"；跟踪止损参考 {_f(trail_px)}（高点 {_f(peak)}）"
             flags = []
             if stop_px and close <= stop_px:
                 flags.append("已低于成本止损")
@@ -127,7 +140,7 @@ def plan_for_code(
                 {
                     "action": "卖出",
                     "order_price": round(close, 2),
-                    "reason": f"收盘 {_f(close)} 自高点 {_f(peak)} 回撤超过 {trailing_stop * 100:.0f}%（移动止损 {_f(trail_px)}），明日开盘卖出",
+                    "reason": f"收盘 {_f(close)} 跌破跟踪止损 {_f(trail_px)}（高点 {_f(peak)}），明日开盘卖出",
                 }
             )
         elif tp and close >= tp:
@@ -147,7 +160,7 @@ def plan_for_code(
                 }
             )
         else:
-            hints = [f"挂移动止损 {_f(trail_px)}"] if trail_px else []
+            hints = [f"挂跟踪止损 {_f(trail_px)}"] if trail_px else []
             if stop_px:
                 hints.append(f"成本止损 {_f(stop_px)}")
             row.update(
@@ -160,13 +173,23 @@ def plan_for_code(
             )
         return row
 
+    if entry_sig and regime_ok is False:
+        row.update(
+            {
+                "action": "观望",
+                "reason": f"个股触发 {strategy.name} 进场信号，但大盘弱势（指数低于均线），按规则不开新仓",
+            }
+        )
+        return row
     if entry_sig:
         qty = _lot(capital * position_pct / close)
-        first_stop = (
-            close * (1 - (stop_loss or trailing_stop or 0))
-            if (stop_loss or trailing_stop)
-            else None
-        )
+        atr_now = float(last["atr"]) if not math.isnan(float(last["atr"])) else 0.0
+        candidates = [
+            close * (1 - stop_loss) if stop_loss else None,
+            close * (1 - trailing_stop) if trailing_stop else None,
+            close - atr_stop * atr_now if atr_stop and atr_now > 0 else None,
+        ]
+        first_stop = max(filter(None, candidates), default=None)
         row.update(
             {
                 "action": "买入",

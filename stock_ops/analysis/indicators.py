@@ -61,5 +61,7 @@ def add_indicators(
     out["vol_ma20"] = sma(out["volume"].astype(float), 20)
     out["vol_ratio"] = out["volume"] / out["vol_ma20"]
     out["high20"] = out["high"].rolling(20, min_periods=20).max()
+    out["high55"] = out["high"].rolling(55, min_periods=55).max()
+    out["low20"] = out["low"].rolling(20, min_periods=20).min()
     out["ret20"] = close.pct_change(20) * 100
     return out

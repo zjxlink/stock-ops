@@ -18,6 +18,15 @@ from .base import (
 _FIELDS = "date,code,open,high,low,close,volume,amount,turn,pctChg"
 
 
+def bs_code_of(code: str) -> tuple[str, str]:
+    """返回 (缓存用代码, baostock 代码)。带交易所前缀的指数如 sh.000300 原样直通，否则按 6 位股票代码推断。"""
+    s = str(code).strip().lower()
+    if "." in s and s.split(".")[0] in ("sh", "sz") and s.split(".")[1].isdigit():
+        return s, s
+    c = normalize_code(s)
+    return c, f"{exchange_prefix(c)}.{c}"
+
+
 class BaostockProvider:
     name = "baostock"
 
@@ -43,9 +52,9 @@ class BaostockProvider:
 
     def daily(self, code: str, start: str, end: str) -> pd.DataFrame:
         bs = self._ensure_login()
-        c = normalize_code(code)
+        c, bs_code = bs_code_of(code)
         rs = bs.query_history_k_data_plus(
-            f"{exchange_prefix(c)}.{c}",
+            bs_code,
             _FIELDS,
             start_date=start,
             end_date=end,
