@@ -22,6 +22,7 @@ START = (date.today() - timedelta(days=200)).isoformat()
 END = date.today().isoformat()
 
 LINES: list[str] = []
+SMOKE_CODES = ["600519", "000858", "300750", "601318", "000001"]
 
 
 def say(msg: str) -> None:
@@ -41,6 +42,20 @@ def check(name: str, fn) -> bool:
         return False
 
 
+def probe(name: str, url: str | None, headers: dict | None = None, fn=None) -> None:
+    try:
+        if fn is not None:
+            out = fn()
+            say(f"[PROBE] {name}: ok, {len(out)} 行")
+            return
+        import requests
+
+        r = requests.get(url, headers=headers or {}, timeout=10)
+        say(f"[PROBE] {name}: HTTP {r.status_code}, {r.text[:80]!r}")
+    except Exception as e:
+        say(f"[PROBE] {name}: {type(e).__name__}: {str(e)[:120]}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=None)
@@ -57,6 +72,19 @@ def main() -> int:
     em = AkshareEmProvider()
     results["akshare_em.daily"] = check("akshare_em.daily", lambda: em.daily(CODE, START, END))
     results["akshare_em.snapshot"] = check("akshare_em.snapshot", em.snapshot)
+    bs2 = BaostockProvider()
+    results["baostock.snapshot(5)"] = check(
+        "baostock.snapshot(5)", lambda: bs2.snapshot(codes=SMOKE_CODES)
+    )
+    bs2.close()
+    # 探针：数据中心 IP 下哪些行情源还能用（用于补市值字段）
+    probe("qt.gtimg.cn", "https://qt.gtimg.cn/q=sh600519")
+    probe(
+        "hq.sinajs.cn",
+        "https://hq.sinajs.cn/list=sh600519",
+        headers={"Referer": "https://finance.sina.com.cn"},
+    )
+    probe("akshare.stock_zh_a_spot(sina)", None, fn=lambda: __import__("akshare").stock_zh_a_spot())
 
     # 完整流程：Fetcher 自动切换 -> 缓存 -> 信号 -> 筛选
     db = Path(args.db) if args.db else Path(tempfile.mkdtemp()) / "smoke.db"
@@ -71,10 +99,12 @@ def main() -> int:
         say(f"[FAIL] pipeline: {e}")
         results["pipeline"] = False
     try:
-        n = f.update_snapshot()
+        f.snapshot_codes = SMOKE_CODES  # 冒烟只拼接 5 只，避免 baostock 全市场耗时
+        n, src = f.update_snapshot()
         screened = fundamental_screen(cache.snapshot())
         say(
-            f"[OK]   screen: 快照 {n} 只，通过 {len(screened)} 只，剔除 {screened.attrs.get('rejects')}"
+            f"[OK]   screen: 快照 {n} 只 (来源 {src})，通过 {len(screened)} 只，"
+            f"剔除 {screened.attrs.get('rejects')}，跳过 {screened.attrs.get('skipped')}"
         )
         results["screen"] = n > 0
     except Exception as e:

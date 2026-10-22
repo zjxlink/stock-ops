@@ -91,8 +91,8 @@ def update(
     for c, n in res.items():
         rprint(f"{c}: " + ("[red]失败[/]" if n < 0 else f"+{n} 行"))
     if snapshot:
-        n = f.update_snapshot()
-        rprint(f"快照: {n} 只")
+        n, src = f.update_snapshot()
+        rprint(f"快照: {n} 只 (来源 {src})")
 
 
 @app.command()
@@ -136,6 +136,8 @@ def screen(config: str | None = typer.Option(None, "--config", "-c"), top: int =
         raise typer.Exit(1)
     res = fundamental_screen(snap, cfg.fundamental)
     rprint(f"输入 {res.attrs['input_count']} 只，通过 {len(res)} 只，剔除 {res.attrs['rejects']}")
+    if res.attrs.get("skipped"):
+        rprint(f"[yellow]数据源缺字段，已跳过规则: {res.attrs['skipped']}[/]")
     _print_df(
         res,
         "基本面筛选",

@@ -14,3 +14,11 @@ def test_screen_params_override(snapshot):
         snapshot, {"pe_ttm_max": 100, "pb_max": 20, "total_mv_min": 0, "turnover_min": 0}
     )
     assert len(out) == 4  # 只剔除 ST
+
+
+def test_screen_skips_all_nan_column(snapshot):
+    snap = snapshot.copy()
+    snap["total_mv"] = float("nan")
+    out = fundamental_screen(snap)
+    assert "total_mv_min" in out.attrs["skipped"]
+    assert set(out["code"]) == {"600001", "600004"}  # 小公司不再因市值被剔除

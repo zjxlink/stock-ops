@@ -45,6 +45,7 @@ class Fetcher:
         self.snapshot_provider = snapshot_provider or AkshareEmProvider()
         self.request_interval = request_interval
         self.max_retries = max_retries
+        self.snapshot_codes: list[str] | None = None  # 限定 baostock 快照范围（None 为全市场）
 
     def _with_retry(self, fn, *args):
         last: Exception | None = None
@@ -102,11 +103,28 @@ class Fetcher:
                 result[c] = -1
         return result
 
-    def update_snapshot(self) -> int:
-        df = self._with_retry(self.snapshot_provider.snapshot)
-        return self.cache.replace_snapshot(
+    def update_snapshot(self) -> tuple[int, str]:
+        """先试 snapshot_provider（东财，快），失败后退化为 Baostock 逐只拼接（慢但稳）。返回 (只数, 来源)。"""
+        try:
+            df = self._with_retry(self.snapshot_provider.snapshot)
+            source = self.snapshot_provider.name
+        except Exception as e:
+            log.warning(
+                "快照源 %s 失败，退化为 baostock 逐只拼接: %s", self.snapshot_provider.name, e
+            )
+            bs = (
+                next((p for p in self.providers if isinstance(p, BaostockProvider)), None)
+                or BaostockProvider()
+            )
+            df = bs.snapshot(
+                codes=self.snapshot_codes,
+                progress=lambda i, n: log.info("baostock 快照 %d/%d", i, n),
+            )
+            source = "baostock"
+        n = self.cache.replace_snapshot(
             df, updated_at=pd.Timestamp.now().isoformat(timespec="seconds")
         )
+        return n, source
 
 
 __all__ = ["Fetcher", "build_providers", "empty_daily"]

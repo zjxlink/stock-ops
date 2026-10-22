@@ -12,7 +12,7 @@ class FailingProvider:
         raise ConnectionError("boom")
 
     def snapshot(self):
-        raise NotImplementedError
+        raise ConnectionError("boom")
 
 
 class FakeProvider:
@@ -58,3 +58,40 @@ def test_trades_crud(tmp_path):
     assert len(c.trades()) == 1
     assert c.delete_trade(tid) and c.trades().empty
     assert isinstance(empty_daily(), pd.DataFrame)
+
+
+def test_snapshot_fallback_to_baostock(tmp_path, monkeypatch):
+    import stock_ops.data.fetch as fetch_mod
+
+    class FakeBs(fetch_mod.BaostockProvider):
+        def snapshot(self, codes=None, progress=None):
+            return pd.DataFrame(
+                [
+                    {
+                        "code": "600519",
+                        "name": "茅台",
+                        "price": 1500.0,
+                        "pct_chg": 1.0,
+                        "pe_ttm": 20.0,
+                        "pb": 8.0,
+                        "total_mv": float("nan"),
+                        "float_mv": float("nan"),
+                        "turnover": 0.3,
+                        "volume": 1e6,
+                        "amount": 1e9,
+                    }
+                ]
+            )
+
+    monkeypatch.setattr(fetch_mod, "BaostockProvider", FakeBs)
+    c = Cache(tmp_path / "t.db")
+    f = Fetcher(
+        c,
+        providers=[FakeProvider()],
+        snapshot_provider=FailingProvider(),
+        request_interval=0,
+        max_retries=1,
+    )
+    n, src = f.update_snapshot()
+    assert n == 1 and src == "baostock"
+    assert c.snapshot().iloc[0]["name"] == "茅台"
