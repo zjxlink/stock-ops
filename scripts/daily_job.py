@@ -73,12 +73,12 @@ def main() -> int:
         except Exception as e:
             log.error("快照失败，沿用上次缓存: %s", e)
 
-    # 基本面：持仓股与自选股，缓存超过 N 天重新抓取
+    # 基本面：持仓股与自选股每天重抓（只有几只，开销很小），全市场由周更任务按 fundamentals_max_age_days 更新
     try:
         nf = update_fundamentals(
             cache,
             [c for c in codes if "." not in c],
-            max_age_days=int(cfg.data.get("fundamentals_max_age_days") or 7),
+            max_age_days=0,
         )
         log.info("基本面更新 %d 只", nf)
     except Exception as e:
