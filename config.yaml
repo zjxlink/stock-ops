@@ -17,6 +17,7 @@ screen:
     min_listed_days: 250
     roe_min: 10               # ROE 下限（%），财报缺失的不剔除
     yoy_ni_min: 10            # 本期净利润同比下限（%）
+    yoy_ni_max: 100           # 本期净利润同比上限（%），超过视为低基数或周期顶部，不算稳健成长；留空不限
     yoy_ni_prev_min: 0        # 上一期净利润同比下限（%），与本期一起构成连续增长
     liability_to_asset_max: 60   # 资产负债率上限（%）
     growth_cap: 50            # 评分时增速封顶（%），避免周期反转的爆发式数字占优

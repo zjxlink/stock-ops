@@ -27,6 +27,7 @@ DEFAULTS: dict[str, Any] = {
             "min_listed_days": 250,
             "roe_min": 10,
             "yoy_ni_min": 10,
+            "yoy_ni_max": 100,
             "yoy_ni_prev_min": 0,
             "liability_to_asset_max": 60,
             "growth_cap": 50,

@@ -246,8 +246,12 @@ def test_stable_growth_prefers_consistent_over_spike():
         }
     )
     out = fundamental_screen(snap, None, fund)
-    assert list(out["code"]) == ["A"]  # B 上一期负增长被剔除
-    assert out.attrs["rejects"]["yoy_ni_prev_min"] == 1
+    assert list(out["code"]) == ["A"]  # B 本期 900% 超上限被剔除
+    assert out.attrs["rejects"]["yoy_ni_max"] == 1
+    out = fundamental_screen(snap, {"yoy_ni_max": None}, fund)
+    assert (
+        list(out["code"]) == ["A"] and out.attrs["rejects"]["yoy_ni_prev_min"] == 1
+    )  # 放开上限后仍因上一期负增长被剔除
 
 
 def test_cache_migration_adds_prev_columns(tmp_path):
@@ -274,3 +278,9 @@ def test_cache_migration_adds_prev_columns(tmp_path):
     c.conn.execute("UPDATE fundamentals SET report_date_prev='' WHERE code='600519'")
     c.conn.commit()
     assert c.fundamentals_stale(["600519"], max_age_days=7, today=_d(2026, 10, 22)) == []
+
+
+def test_growth_band_prefers_moderate_growth():
+    df = pd.DataFrame({"yoy_ni": [25.0, 300.0, 2.0], "roe": [15, 15, 15]})
+    q = quality_score(df)
+    assert q.iloc[0] > q.iloc[1] and q.iloc[0] > q.iloc[2]

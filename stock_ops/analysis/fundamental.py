@@ -38,7 +38,7 @@ def quality_score(df: pd.DataFrame, growth_cap: float = 50.0) -> pd.Series:
     """稳健成长分（0 到 1）：各项按横截面百分位排名后加权平均，缺失项记 0.5。
 
     - ROE（封顶 40）越高越好，权重 2
-    - 净利润同比（封顶 growth_cap，周期反转的爆发式数字不占便宜）越高越好，权重 2；上一期也为正再加分
+    - 净利润同比落在 [10%, growth_cap] 区间得分最高，越偏离越低（爆发式反转不加分），权重 2；上一期也为正再加分
     - ROE 两期波动越小越好（稳定性），权重 1
     - 毛利率越高越好（护城河代理），权重 1
     - 经营现金流 / 净利润（封顶 3）越高越好，权重 1
@@ -54,7 +54,14 @@ def quality_score(df: pd.DataFrame, growth_cap: float = 50.0) -> pd.Series:
     if "roe" in df:
         add(df["roe"].clip(upper=40), True, 2)
     if "yoy_ni" in df:
-        add(df["yoy_ni"].clip(-growth_cap, growth_cap), True, 2)
+        # 区间偏好：增速落在 [10%, growth_cap] 得满分，低于 10% 或高于 growth_cap 都递减；
+        # 两期都超过 growth_cap 的爆发式增长（低基数 / 周期顶部）不再是优势
+        g = df["yoy_ni"]
+        band = pd.Series(
+            np.where(g < 10, g - 10, np.where(g > growth_cap, growth_cap - g, 0.0)), index=df.index
+        )
+        band[g.isna()] = np.nan
+        add(band, True, 2)
         if "yoy_ni_prev" in df:
             both = ((df["yoy_ni"] > 0) & (df["yoy_ni_prev"] > 0)).astype(float)
             both[df["yoy_ni_prev"].isna()] = np.nan
@@ -88,6 +95,7 @@ def fundamental_screen(
         "exclude_st": True,
         "roe_min": 10,
         "yoy_ni_min": 10,
+        "yoy_ni_max": 100,
         "yoy_ni_prev_min": 0,
         "liability_to_asset_max": 60,
         "growth_cap": 50,
@@ -122,6 +130,8 @@ def fundamental_screen(
         apply("roe_min", df["roe"].isna() | (df["roe"] >= p["roe_min"]), "roe")
     if p.get("yoy_ni_min") is not None:
         apply("yoy_ni_min", df["yoy_ni"].isna() | (df["yoy_ni"] >= p["yoy_ni_min"]), "yoy_ni")
+    if p.get("yoy_ni_max") is not None:
+        apply("yoy_ni_max", df["yoy_ni"].isna() | (df["yoy_ni"] <= p["yoy_ni_max"]), "yoy_ni")
     if p.get("yoy_ni_prev_min") is not None:
         apply(
             "yoy_ni_prev_min",
