@@ -66,6 +66,9 @@ def main() -> int:
     results: dict[str, bool] = {}
     bs = BaostockProvider()
     results["baostock.daily"] = check("baostock.daily", lambda: bs.daily(CODE, START, END))
+    results["baostock.index"] = check(
+        "baostock.index(sh.000300)", lambda: bs.daily("sh.000300", START, END)
+    )
     bs.close()
     results["akshare_tx.daily"] = check(
         "akshare_tx.daily", lambda: AkshareTxProvider().daily(CODE, START, END)

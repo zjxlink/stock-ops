@@ -155,9 +155,7 @@ def run_backtest(
             elif exit_[i] and held_days >= cfg.min_hold_days:
                 pending = "sell:signal"
         elif entry[i] and regime_ok[i]:
-            in_cooldown = (
-                last_exit_reason.endswith("stop") and (i - last_exit_i) < cfg.cooldown_days
-            )
+            in_cooldown = "stop" in last_exit_reason and (i - last_exit_i) < cfg.cooldown_days
             if not in_cooldown:
                 pending = "buy"
 

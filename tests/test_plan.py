@@ -85,7 +85,9 @@ def test_trailing_stop_in_plan_uses_peak_since_entry():
     pos = Position(
         code="A", shares=100, cost=100 * df["close"].iloc[140], first_date=str(df["date"].iloc[140])
     )
-    row = plan_for_code("A", df, get_strategy("ma_bull"), pos, stop_loss=None, trailing_stop=0.15)
+    row = plan_for_code(
+        "A", df, get_strategy("ma_bull"), pos, stop_loss=None, trailing_stop=0.15, atr_stop=None
+    )
     peak = df["close"].iloc[140:].max()
     assert abs(row["trail_price"] - round(peak * 0.85, 2)) < 1e-6
     assert row["action"] == "卖出" and "移动止损" in row["reason"]
@@ -120,6 +122,7 @@ def test_trailing_from_anchors_peak_for_legacy_positions():
         stop_loss=None,
         trailing_stop=0.15,
         trailing_from=anchor,
+        atr_stop=None,
     )
     assert abs(row["trail_price"] - round(df["close"].iloc[170:].max() * 0.85, 2)) < 1e-6
     assert row["action"] in ("持有", "卖出")
