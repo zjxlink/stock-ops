@@ -62,7 +62,7 @@ def parse_quote_line(line: str) -> dict | None:
 
 
 def sina_universe() -> list[str]:
-    """从新浪全市场行情取 A 股代码池（6 位）。"""
+    """从新浪全市场行情取 A 股代码池（6 位）。偶发超时。"""
     import akshare as ak
 
     df = ak.stock_zh_a_spot()
@@ -70,10 +70,32 @@ def sina_universe() -> list[str]:
     return sorted(c for c in codes if c[:2] in ("60", "68", "00", "30"))
 
 
+def baostock_universe() -> list[str]:
+    from .baostock_provider import BaostockProvider
+
+    bs = BaostockProvider()
+    try:
+        return sorted(bs.stock_list()["code"].tolist())
+    finally:
+        bs.close()
+
+
+def default_universe() -> list[str]:
+    """股票池：新浪（快）失败时退化为 Baostock 股票列表（稳）。"""
+    try:
+        codes = sina_universe()
+        if codes:
+            return codes
+        log.warning("新浪股票池为空，改用 baostock")
+    except Exception as e:
+        log.warning("新浪股票池失败，改用 baostock: %s", e)
+    return baostock_universe()
+
+
 class TencentQuoteProvider:
     name = "tencent"
 
-    def __init__(self, request_interval: float = 0.2, universe_fn=sina_universe) -> None:
+    def __init__(self, request_interval: float = 0.2, universe_fn=default_universe) -> None:
         self.request_interval = request_interval
         self.universe_fn = universe_fn
 

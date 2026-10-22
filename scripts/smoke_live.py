@@ -16,7 +16,7 @@ from stock_ops.analysis import fundamental_screen, technical_signals
 from stock_ops.data import Cache, Fetcher
 from stock_ops.data.akshare_provider import AkshareEmProvider, AkshareTxProvider
 from stock_ops.data.baostock_provider import BaostockProvider
-from stock_ops.data.tencent_provider import TencentQuoteProvider, sina_universe
+from stock_ops.data.tencent_provider import TencentQuoteProvider, default_universe
 
 CODE = "600519"
 START = (date.today() - timedelta(days=200)).isoformat()
@@ -90,7 +90,7 @@ def main() -> int:
         )
     except Exception as e:
         say(f"       600519 核对失败: {e}")
-    probe("sina universe", None, fn=sina_universe)
+    probe("universe(sina->baostock)", None, fn=default_universe)
 
     # 完整流程：Fetcher 自动切换 -> 缓存 -> 信号 -> 筛选
     db = Path(args.db) if args.db else Path(tempfile.mkdtemp()) / "smoke.db"

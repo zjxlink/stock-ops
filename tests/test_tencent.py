@@ -18,3 +18,14 @@ def test_parse_quote_line():
 def test_parse_rejects_short_line():
     assert parse_quote_line('v_sh600519="1~a~b";') is None
     assert parse_quote_line("garbage") is None
+
+
+def test_default_universe_falls_back(monkeypatch):
+    import stock_ops.data.tencent_provider as tp
+
+    def boom():
+        raise TimeoutError("sina down")
+
+    monkeypatch.setattr(tp, "sina_universe", boom)
+    monkeypatch.setattr(tp, "baostock_universe", lambda: ["000001", "600519"])
+    assert tp.default_universe() == ["000001", "600519"]
