@@ -103,3 +103,23 @@ def test_per_stock_rule_overrides_trailing():
         "A", df, get_strategy("ma_bull"), pos, trailing_stop=0.15, rule={"trailing_stop": 0.05}
     )
     assert abs(row["trail_price"] - round(df["close"].iloc[-5:].max() * 0.95, 2)) < 1e-6
+
+
+def test_trailing_from_anchors_peak_for_legacy_positions():
+    df = make_daily("A", n=200, seed=1, trend=0.0)
+    df.loc[150:159, "close"] = df["close"].iloc[149] * 1.5  # 老仓位期间的历史高点
+    pos = Position(
+        code="A", shares=100, cost=100 * df["close"].iloc[140], first_date=str(df["date"].iloc[140])
+    )
+    anchor = str(df["date"].iloc[170])
+    row = plan_for_code(
+        "A",
+        df,
+        get_strategy("ma_bull"),
+        pos,
+        stop_loss=None,
+        trailing_stop=0.15,
+        trailing_from=anchor,
+    )
+    assert abs(row["trail_price"] - round(df["close"].iloc[170:].max() * 0.85, 2)) < 1e-6
+    assert row["action"] in ("持有", "卖出")

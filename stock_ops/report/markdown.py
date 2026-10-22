@@ -69,6 +69,7 @@ def daily_report(
                     "order_price",
                     "shares",
                     "stop_price",
+                    "trail_price",
                     "exit_level",
                     "entry_level",
                     "reason",

@@ -36,7 +36,7 @@ DEFAULTS: dict[str, Any] = {
         },
     },
     "portfolio": {"trades_path": "data/trades.csv"},
-    "plan": {"capital": 100000, "position_pct": 0.2, "rules": {}},
+    "plan": {"capital": 100000, "position_pct": 0.2, "rules": {}, "trailing_from": None},
     "backtest": {
         "strategy": "ma_bull",
         "start": "2019-01-01",

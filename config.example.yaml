@@ -26,6 +26,7 @@ screen:
 plan:
   capital: 100000           # 用于计算建议买入股数的总资金（元）
   position_pct: 0.2         # 单只股票仓位上限（占总资金比例）
+  trailing_from:    # 移动止损高点起算日：老仓位从这天开始记最高收盘，留空则自买入日起算
   rules: {}                 # 按股票覆盖，例如 {"300458": {mode: hold, note: 长期持有}} 或 {"000550": {trailing_stop: 0.1}}
 
 backtest:

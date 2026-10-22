@@ -2,7 +2,8 @@
 
 动作只有四种：卖出、买入、持有、观望。价位用于挂条件单：
 - stop_price   成本止损价（成本 × (1 - stop_loss)），未启用则为空
-- trail_price  移动止损价（持仓期间最高收盘 × (1 - trailing_stop)），未启用则为空
+- trail_price  移动止损价（持仓期间最高收盘 × (1 - trailing_stop)），未启用则为空。
+               高点自买入日起算；设置 trailing_from 后，老仓位改为自该日起算（系统接管日）
 - exit_level   策略出场参考位（20 日均线），收盘跌破则次日卖出
 - entry_level  触发买入的参考位（20 日均线 / 20 日高点）
 
@@ -54,6 +55,7 @@ def plan_for_code(
     name: str = "",
     stop_loss: float | None = None,
     trailing_stop: float | None = 0.15,
+    trailing_from: str | None = None,
     take_profit: float | None = None,
     capital: float = 100_000.0,
     position_pct: float = 0.2,
@@ -85,7 +87,10 @@ def plan_for_code(
     if held:
         cost = position.avg_cost
         row["shares"] = position.shares
-        since = x[x["date"].astype(str) >= str(position.first_date)] if position.first_date else x
+        anchor = max(
+            filter(None, [str(position.first_date or ""), str(trailing_from or "")]), default=""
+        )
+        since = x[x["date"].astype(str) >= anchor] if anchor else x
         peak = float(since["close"].max()) if not since.empty else close
         stop_px = cost * (1 - stop_loss) if stop_loss else None
         trail_px = peak * (1 - trailing_stop) if trailing_stop else None

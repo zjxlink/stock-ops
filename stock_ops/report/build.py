@@ -76,7 +76,10 @@ def build_report(
             strat,
             book,
             names,
+            rules={str(k).zfill(6): v for k, v in (cfg.plan.get("rules") or {}).items()},
             stop_loss=cfg.backtest.get("stop_loss") or None,
+            trailing_stop=cfg.backtest.get("trailing_stop") or None,
+            trailing_from=str(cfg.plan.get("trailing_from") or "") or None,
             take_profit=cfg.backtest.get("take_profit") or None,
             capital=float(cfg.plan["capital"]),
             position_pct=float(cfg.plan["position_pct"]),
@@ -95,7 +98,8 @@ def build_report(
         sl = cfg.backtest.get("stop_loss")
         rd.backtest_note = (
             f"策略 {strat.name}（{strat.description}），{cfg.backtest['start']} 起，初始资金 {cfg.backtest['initial_cash']:,}"
-            + (f"，止损 {sl * 100:.0f}%" if sl else "")
+            + (f"，成本止损 {sl * 100:.0f}%" if sl else "")
+            + (f"，移动止损 {ts * 100:.0f}%" if (ts := cfg.backtest.get("trailing_stop")) else "")
         )
         rd.equity_curves = {c: r.equity.tolist() for c, r in results.items()}
         rows = []
