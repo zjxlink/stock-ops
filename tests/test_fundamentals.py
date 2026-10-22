@@ -268,5 +268,9 @@ def test_cache_migration_adds_prev_columns(tmp_path):
     assert {"report_date_prev", "roe_prev", "yoy_ni_prev"} <= cols
     from datetime import date as _d
 
-    # 有最新季报但缺上一期 -> 需要重抓
-    assert c.fundamentals_stale(["600519"], max_age_days=0, today=_d(2026, 10, 22)) == ["600519"]
+    # 有最新季报但从未抓过上一期（NULL）-> 即使 7 天内更新过也必须重抓
+    assert c.fundamentals_stale(["600519"], max_age_days=7, today=_d(2026, 10, 22)) == ["600519"]
+    # 抓过、公司没有上一期（空字符串）、且 7 天内检查过 -> 不重抓
+    c.conn.execute("UPDATE fundamentals SET report_date_prev='' WHERE code='600519'")
+    c.conn.commit()
+    assert c.fundamentals_stale(["600519"], max_age_days=7, today=_d(2026, 10, 22)) == []

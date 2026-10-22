@@ -159,10 +159,13 @@ class Cache:
             if max_age_days > 0
             else pd.Series(False, index=df.index)
         )
-        has_prev = (
-            df["report_date_prev"].notna() & (df["report_date_prev"].astype(str) != "")
+        # report_date_prev 为 NULL：新字段从未抓取过，必须重抓；为空字符串：抓过但该公司没有上一期数据
+        prev = (
+            df["report_date_prev"]
             if "report_date_prev" in df
-            else pd.Series(False, index=df.index)
+            else pd.Series(None, index=df.index, dtype=object)
         )
-        fresh = set(df[(has_latest & has_prev) | checked_recently]["code"])
+        never_fetched_prev = prev.isna()
+        has_prev = prev.notna() & (prev.astype(str) != "")
+        fresh = set(df[((has_latest & has_prev) | checked_recently) & ~never_fetched_prev]["code"])
         return [c for c in codes if c not in fresh]
