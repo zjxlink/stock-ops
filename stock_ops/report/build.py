@@ -32,6 +32,11 @@ def build_report(cfg: Config, cache: Cache, as_of: str) -> ReportData:
     codes = sorted(set(cfg.watchlist) | set(held))
     sigs = rank_signals([technical_signals(cache.daily(c), cfg.technical) for c in codes])
     snap = cache.snapshot()
+    names = snap.set_index("code")["name"] if not snap.empty else pd.Series(dtype=str)
+    if not summary.empty:
+        summary.insert(1, "name", summary["code"].map(names).fillna(""))
+    if not sigs.empty:
+        sigs.insert(1, "name", sigs["code"].map(names).fillna(""))
     screened = fundamental_screen(snap, cfg.fundamental) if not snap.empty else snap
     updated = str(snap["updated_at"].iloc[0]) if not snap.empty and "updated_at" in snap else None
     return ReportData(as_of, summary, sigs, screened, closed, updated)
