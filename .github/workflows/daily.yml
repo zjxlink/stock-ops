@@ -66,9 +66,8 @@ jobs:
             git push
           fi
 
+      # 需先在仓库 Settings -> Pages 中把 Source 设为 GitHub Actions，否则以下三步失败（不影响日报提交）
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
