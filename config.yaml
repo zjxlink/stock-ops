@@ -8,16 +8,18 @@ data:
 
 screen:
   fundamental:
-    pe_ttm_max: 40
+    pe_ttm_max: 30
     pe_ttm_min: 0
     pb_max: 8
     total_mv_min: 5.0e+9      # 总市值下限（元）
     turnover_min: 0.5         # 换手率下限（%）
     exclude_st: true
     min_listed_days: 250
-    roe_min: 8                # ROE 下限（%），财报缺失的不剔除
-    yoy_ni_min: 0             # 净利润同比下限（%）
-    liability_to_asset_max: 70   # 资产负债率上限（%）
+    roe_min: 10               # ROE 下限（%），财报缺失的不剔除
+    yoy_ni_min: 10            # 本期净利润同比下限（%）
+    yoy_ni_prev_min: 0        # 上一期净利润同比下限（%），与本期一起构成连续增长
+    liability_to_asset_max: 60   # 资产负债率上限（%）
+    growth_cap: 50            # 评分时增速封顶（%），避免周期反转的爆发式数字占优
   technical:
     ma_fast: 5
     ma_mid: 20

@@ -31,6 +31,9 @@ FUND_COLUMNS = [
     "current_ratio",
     "cfo_to_np",
     "cfo_to_revenue",
+    "report_date_prev",
+    "roe_prev",
+    "yoy_ni_prev",
     "updated_at",
 ]
 
@@ -94,48 +97,63 @@ class BaostockFundamentals:
     def close(self) -> None:
         self.provider.close()
 
-    def fetch(self, code: str, today: date | None = None) -> dict | None:
-        """最新一期财报的统一字段字典；该股近几期都没有数据则返回 None。"""
-        bs = self.provider._ensure_login()
-        c, bs_code = bs_code_of(code)
-        for year, quarter in latest_quarters(today):
-            profit = _rows(bs.query_profit_data(code=bs_code, year=year, quarter=quarter))
-            time.sleep(self.request_interval)
-            if not profit:
-                continue
-            growth = _rows(bs.query_growth_data(code=bs_code, year=year, quarter=quarter))
+    def _period(self, bs, bs_code: str, year: int, quarter: int, full: bool) -> dict | None:
+        """抓一个财报期。full=False 只取盈利与成长（用于上一期）。无数据返回 None。"""
+        profit = _rows(bs.query_profit_data(code=bs_code, year=year, quarter=quarter))
+        time.sleep(self.request_interval)
+        if not profit:
+            return None
+        growth = _rows(bs.query_growth_data(code=bs_code, year=year, quarter=quarter))
+        row: dict = {
+            "report_date": profit[0].get("statDate", ""),
+            "pub_date": profit[0].get("pubDate", ""),
+        }
+        sources = [(profit, _PROFIT), (growth, _GROWTH)]
+        if full:
             balance = _rows(bs.query_balance_data(code=bs_code, year=year, quarter=quarter))
             cash = _rows(bs.query_cash_flow_data(code=bs_code, year=year, quarter=quarter))
-            time.sleep(self.request_interval)
+            sources += [(balance, _BALANCE), (cash, _CASH)]
+        time.sleep(self.request_interval)
+        for src, mapping in sources:
+            if src:
+                for k, v in mapping.items():
+                    row[v] = _num(src[0].get(k))
+        for k in (
+            "roe",
+            "np_margin",
+            "gp_margin",
+            "yoy_ni",
+            "yoy_revenue",
+            "yoy_equity",
+            "liability_to_asset",
+        ):
+            if k in row and not math.isnan(row[k]):
+                row[k] = round(row[k] * 100, 2)
+        return row
+
+    def fetch(self, code: str, today: date | None = None) -> dict | None:
+        """最新一期财报的统一字段，并附上一期的 ROE 与净利润同比；该股近几期都没有数据则返回 None。"""
+        bs = self.provider._ensure_login()
+        c, bs_code = bs_code_of(code)
+        quarters = latest_quarters(today, n=5)
+        for idx, (year, quarter) in enumerate(quarters[:4]):
+            cur = self._period(bs, bs_code, year, quarter, full=True)
+            if cur is None:
+                continue
             row: dict = {k: float("nan") for k in FUND_COLUMNS}
-            row.update(
-                {
-                    "code": c,
-                    "report_date": profit[0].get("statDate", ""),
-                    "pub_date": profit[0].get("pubDate", ""),
-                }
+            row.update(cur)
+            row["code"] = c
+            prev = (
+                self._period(bs, bs_code, *quarters[idx + 1], full=False)
+                if idx + 1 < len(quarters)
+                else None
             )
-            for src, mapping in (
-                (profit, _PROFIT),
-                (growth, _GROWTH),
-                (balance, _BALANCE),
-                (cash, _CASH),
-            ):
-                if src:
-                    for k, v in mapping.items():
-                        row[v] = _num(src[0].get(k))
-            # 百分比统一为 %：baostock 的比率为小数
-            for k in (
-                "roe",
-                "np_margin",
-                "gp_margin",
-                "yoy_ni",
-                "yoy_revenue",
-                "yoy_equity",
-                "liability_to_asset",
-            ):
-                if not math.isnan(row[k]):
-                    row[k] = round(row[k] * 100, 2)
+            if prev:
+                row["report_date_prev"] = prev.get("report_date", "")
+                row["roe_prev"] = prev.get("roe", float("nan"))
+                row["yoy_ni_prev"] = prev.get("yoy_ni", float("nan"))
+            else:
+                row["report_date_prev"] = ""
             row["updated_at"] = (today or date.today()).isoformat()
             return row
         return None

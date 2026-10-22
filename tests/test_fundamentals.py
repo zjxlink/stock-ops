@@ -20,25 +20,40 @@ class _RS:
 
 class _FakeBs:
     def query_profit_data(self, code, year, quarter):
-        if (year, quarter) != (2026, 2):
-            return _RS([], ["code"])
-        return _RS(
-            [[code, "2026-08-20", "2026-06-30", "0.1523", "0.52", "0.91", "12.5", "55.2"]],
-            [
-                "code",
-                "pubDate",
-                "statDate",
-                "roeAvg",
-                "npMargin",
-                "gpMargin",
-                "epsTTM",
-                "MBRevenue",
-            ],
-        )
+        if (year, quarter) == (2026, 2):
+            return _RS(
+                [[code, "2026-08-20", "2026-06-30", "0.1523", "0.52", "0.91", "12.5", "55.2"]],
+                [
+                    "code",
+                    "pubDate",
+                    "statDate",
+                    "roeAvg",
+                    "npMargin",
+                    "gpMargin",
+                    "epsTTM",
+                    "MBRevenue",
+                ],
+            )
+        if (year, quarter) == (2026, 1):
+            return _RS(
+                [[code, "2026-04-20", "2026-03-31", "0.07", "0.50", "0.90", "12.0", "25.0"]],
+                [
+                    "code",
+                    "pubDate",
+                    "statDate",
+                    "roeAvg",
+                    "npMargin",
+                    "gpMargin",
+                    "epsTTM",
+                    "MBRevenue",
+                ],
+            )
+        return _RS([], ["code"])
 
     def query_growth_data(self, code, year, quarter):
+        yoy = "0.0885" if quarter == 2 else "0.05"
         return _RS(
-            [[code, "2026-08-20", "2026-06-30", "0.12", "0.10", "0.0885", "0.09", "0.0885"]],
+            [[code, "2026-08-20", "2026-06-30", "0.12", "0.10", yoy, "0.09", yoy]],
             [
                 "code",
                 "pubDate",
@@ -109,6 +124,9 @@ def test_fetch_parses_and_scales():
     assert r["code"] == "600519" and r["report_date"] == "2026-06-30"
     assert r["roe"] == 15.23 and r["yoy_ni"] == 8.85 and r["liability_to_asset"] == 16.21
     assert r["cfo_to_np"] == 1.21 and r["eps_ttm"] == 12.5
+    assert (
+        r["report_date_prev"] == "2026-03-31" and r["roe_prev"] == 7.0 and r["yoy_ni_prev"] == 5.0
+    )
     assert set(r) == set(FUND_COLUMNS)
     df = bf.fetch_many(["600519", "000001"], time_budget_s=None)
     assert len(df) == 2
@@ -153,7 +171,9 @@ def test_screen_with_fundamentals(snapshot):
         ]
     )
     out = fundamental_screen(
-        snapshot, {"turnover_min": 0, "total_mv_min": 0, "pe_ttm_max": 100, "pb_max": 20}, fund
+        snapshot,
+        {"turnover_min": 0, "total_mv_min": 0, "pe_ttm_max": 100, "pb_max": 20, "yoy_ni_min": 0},
+        fund,
     )
     # 600005 因 ROE/增速/负债率不达标被剔除；600001 通过；600003/600004 无财报不因财务规则剔除
     assert "600005" not in set(out["code"]) and "600001" in set(out["code"])
@@ -163,7 +183,9 @@ def test_screen_with_fundamentals(snapshot):
 
 def test_screen_without_fundamentals_skips_rules(snapshot):
     out = fundamental_screen(snapshot, {"turnover_min": 0}, None)
-    assert {"roe_min", "yoy_ni_min", "liability_max"} <= set(out.attrs["skipped"])
+    assert {"roe_min", "yoy_ni_min", "yoy_ni_prev_min", "liability_max"} <= set(
+        out.attrs["skipped"]
+    )
     assert out["quality"].notna().any()
 
 
@@ -181,3 +203,70 @@ def test_quality_score_direction():
     assert q.iloc[0] == q.max() and q.iloc[3] == q.min()
     m = merge_fundamentals(pd.DataFrame({"code": ["A"]}), None)
     assert "roe" in m.columns and m["roe"].isna().all()
+
+
+def test_stable_growth_prefers_consistent_over_spike():
+    df = pd.DataFrame(
+        {
+            "roe": [18, 35, 12, 9],
+            "roe_prev": [17, 5, 11, 9],
+            "yoy_ni": [20, 900, 15, 12],
+            "yoy_ni_prev": [18, -60, 12, 11],
+            "gp_margin": [45, 15, 40, 30],
+            "cfo_to_np": [1.1, 0.3, 1.0, 0.9],
+            "liability_to_asset": [35, 70, 40, 50],
+            "pe_ttm": [22, 8, 25, 18],
+        }
+    )
+    q = quality_score(df)
+    assert q.iloc[0] > q.iloc[1]  # 稳定成长股胜过周期反转的爆发股
+    snap = pd.DataFrame(
+        {
+            "code": ["A", "B"],
+            "name": ["a", "b"],
+            "price": [1, 1],
+            "pct_chg": [0, 0],
+            "pe_ttm": [20, 8],
+            "pb": [3, 1],
+            "total_mv": [1e10, 1e10],
+            "float_mv": [1e10, 1e10],
+            "turnover": [1, 1],
+            "volume": [1, 1],
+            "amount": [1, 1],
+        }
+    )
+    fund = pd.DataFrame(
+        {
+            "code": ["A", "B"],
+            "roe": [18, 35],
+            "yoy_ni": [20, 900],
+            "yoy_ni_prev": [18, -60],
+            "liability_to_asset": [35, 50],
+            "report_date": ["x", "x"],
+        }
+    )
+    out = fundamental_screen(snap, None, fund)
+    assert list(out["code"]) == ["A"]  # B 上一期负增长被剔除
+    assert out.attrs["rejects"]["yoy_ni_prev_min"] == 1
+
+
+def test_cache_migration_adds_prev_columns(tmp_path):
+    import sqlite3
+
+    db = tmp_path / "old.db"
+    con = sqlite3.connect(db)
+    con.execute(
+        "CREATE TABLE fundamentals (code TEXT PRIMARY KEY, report_date TEXT, pub_date TEXT, roe REAL, np_margin REAL, gp_margin REAL, eps_ttm REAL, yoy_ni REAL, yoy_revenue REAL, yoy_equity REAL, liability_to_asset REAL, current_ratio REAL, cfo_to_np REAL, cfo_to_revenue REAL, updated_at TEXT)"
+    )
+    con.execute(
+        "INSERT INTO fundamentals (code, report_date, updated_at) VALUES ('600519', '2026-09-30', '2026-10-22')"
+    )
+    con.commit()
+    con.close()
+    c = Cache(db)
+    cols = {r[1] for r in c.conn.execute("PRAGMA table_info(fundamentals)")}
+    assert {"report_date_prev", "roe_prev", "yoy_ni_prev"} <= cols
+    from datetime import date as _d
+
+    # 有最新季报但缺上一期 -> 需要重抓
+    assert c.fundamentals_stale(["600519"], max_age_days=0, today=_d(2026, 10, 22)) == ["600519"]

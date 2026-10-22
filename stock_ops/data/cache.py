@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS snapshot (
 CREATE TABLE IF NOT EXISTS fundamentals (
     code TEXT PRIMARY KEY, report_date TEXT, pub_date TEXT,
     roe REAL, np_margin REAL, gp_margin REAL, eps_ttm REAL, yoy_ni REAL, yoy_revenue REAL, yoy_equity REAL,
-    liability_to_asset REAL, current_ratio REAL, cfo_to_np REAL, cfo_to_revenue REAL, updated_at TEXT
+    liability_to_asset REAL, current_ratio REAL, cfo_to_np REAL, cfo_to_revenue REAL,
+    report_date_prev TEXT, roe_prev REAL, yoy_ni_prev REAL, updated_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_daily_code ON daily(code);
 """
@@ -37,6 +38,19 @@ class Cache:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.path)
         self.conn.executescript(_SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """老库补列：fundamentals 新增的上一期字段。"""
+        have = {r[1] for r in self.conn.execute("PRAGMA table_info(fundamentals)")}
+        for col, typ in (
+            ("report_date_prev", "TEXT"),
+            ("roe_prev", "REAL"),
+            ("yoy_ni_prev", "REAL"),
+        ):
+            if col not in have:
+                self.conn.execute(f"ALTER TABLE fundamentals ADD COLUMN {col} {typ}")
+        self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()
@@ -145,5 +159,10 @@ class Cache:
             if max_age_days > 0
             else pd.Series(False, index=df.index)
         )
-        fresh = set(df[has_latest | checked_recently]["code"])
+        has_prev = (
+            df["report_date_prev"].notna() & (df["report_date_prev"].astype(str) != "")
+            if "report_date_prev" in df
+            else pd.Series(False, index=df.index)
+        )
+        fresh = set(df[(has_latest & has_prev) | checked_recently]["code"])
         return [c for c in codes if c not in fresh]

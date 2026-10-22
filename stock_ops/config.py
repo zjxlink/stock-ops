@@ -18,16 +18,18 @@ DEFAULTS: dict[str, Any] = {
     },
     "screen": {
         "fundamental": {
-            "pe_ttm_max": 40,
+            "pe_ttm_max": 30,
             "pe_ttm_min": 0,
             "pb_max": 8,
             "total_mv_min": 5.0e9,
             "turnover_min": 0.5,
             "exclude_st": True,
             "min_listed_days": 250,
-            "roe_min": 8,
-            "yoy_ni_min": 0,
-            "liability_to_asset_max": 70,
+            "roe_min": 10,
+            "yoy_ni_min": 10,
+            "yoy_ni_prev_min": 0,
+            "liability_to_asset_max": 60,
+            "growth_cap": 50,
         },
         "technical": {
             "ma_fast": 5,

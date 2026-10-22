@@ -16,6 +16,9 @@ FUND_FIELDS = [
     "cfo_to_np",
     "eps_ttm",
     "report_date",
+    "roe_prev",
+    "yoy_ni_prev",
+    "report_date_prev",
 ]
 
 
@@ -31,25 +34,45 @@ def merge_fundamentals(snap: pd.DataFrame, fund: pd.DataFrame | None) -> pd.Data
     return out
 
 
-def quality_score(df: pd.DataFrame) -> pd.Series:
-    """质量综合分：ROE、净利润增速、经营现金流/净利润 越高越好，PE、负债率 越低越好。
+def quality_score(df: pd.DataFrame, growth_cap: float = 50.0) -> pd.Series:
+    """稳健成长分（0 到 1）：各项按横截面百分位排名后加权平均，缺失项记 0.5。
 
-    各项按横截面百分位排名后等权平均；某项缺失记 0.5（中性），因此没有财报的个股不会仅凭低 PE 排到前面。
+    - ROE（封顶 40）越高越好，权重 2
+    - 净利润同比（封顶 growth_cap，周期反转的爆发式数字不占便宜）越高越好，权重 2；上一期也为正再加分
+    - ROE 两期波动越小越好（稳定性），权重 1
+    - 毛利率越高越好（护城河代理），权重 1
+    - 经营现金流 / 净利润（封顶 3）越高越好，权重 1
+    - 资产负债率越低越好，权重 1；PE 越低越好，权重 1
     """
-    parts = []
-    for col, higher_better in (
-        ("roe", True),
-        ("yoy_ni", True),
-        ("cfo_to_np", True),
-        ("pe_ttm", False),
-        ("liability_to_asset", False),
-    ):
-        if col in df.columns and df[col].notna().any():
-            r = df[col].rank(pct=True)
-            parts.append((r if higher_better else 1 - r).fillna(0.5))
-    if not parts:
+    comps: list[tuple[pd.Series, float]] = []
+
+    def add(series: pd.Series, higher_better: bool, w: float):
+        if series.notna().any():
+            r = series.rank(pct=True)
+            comps.append(((r if higher_better else 1 - r).fillna(0.5), w))
+
+    if "roe" in df:
+        add(df["roe"].clip(upper=40), True, 2)
+    if "yoy_ni" in df:
+        add(df["yoy_ni"].clip(-growth_cap, growth_cap), True, 2)
+        if "yoy_ni_prev" in df:
+            both = ((df["yoy_ni"] > 0) & (df["yoy_ni_prev"] > 0)).astype(float)
+            both[df["yoy_ni_prev"].isna()] = np.nan
+            add(both, True, 1)
+    if "roe" in df and "roe_prev" in df:
+        add((df["roe"] - df["roe_prev"]).abs(), False, 1)
+    if "gp_margin" in df:
+        add(df["gp_margin"], True, 1)
+    if "cfo_to_np" in df:
+        add(df["cfo_to_np"].clip(upper=3), True, 1)
+    if "liability_to_asset" in df:
+        add(df["liability_to_asset"], False, 1)
+    if "pe_ttm" in df:
+        add(df["pe_ttm"], False, 1)
+    if not comps:
         return pd.Series(np.nan, index=df.index)
-    return pd.concat(parts, axis=1).mean(axis=1).round(3)
+    total = sum(w for _, w in comps)
+    return (sum(s * w for s, w in comps) / total).round(3)
 
 
 def fundamental_screen(
@@ -63,9 +86,11 @@ def fundamental_screen(
         "total_mv_min": 5.0e9,
         "turnover_min": 0.5,
         "exclude_st": True,
-        "roe_min": 8,
-        "yoy_ni_min": 0,
-        "liability_to_asset_max": 70,
+        "roe_min": 10,
+        "yoy_ni_min": 10,
+        "yoy_ni_prev_min": 0,
+        "liability_to_asset_max": 60,
+        "growth_cap": 50,
     }
     p.update(params or {})
     if snap is None or snap.empty:
@@ -97,6 +122,12 @@ def fundamental_screen(
         apply("roe_min", df["roe"].isna() | (df["roe"] >= p["roe_min"]), "roe")
     if p.get("yoy_ni_min") is not None:
         apply("yoy_ni_min", df["yoy_ni"].isna() | (df["yoy_ni"] >= p["yoy_ni_min"]), "yoy_ni")
+    if p.get("yoy_ni_prev_min") is not None:
+        apply(
+            "yoy_ni_prev_min",
+            df["yoy_ni_prev"].isna() | (df["yoy_ni_prev"] >= p["yoy_ni_prev_min"]),
+            "yoy_ni_prev",
+        )
     if p.get("liability_to_asset_max") is not None:
         apply(
             "liability_max",
@@ -106,7 +137,7 @@ def fundamental_screen(
         )
 
     df = df.copy()
-    df["quality"] = quality_score(df)
+    df["quality"] = quality_score(df, growth_cap=float(p.get("growth_cap") or 50))
     out = df.sort_values(
         ["quality", "pe_ttm"], ascending=[False, True], na_position="last"
     ).reset_index(drop=True)
