@@ -96,7 +96,11 @@ class _FakeProvider:
 def test_latest_quarters():
     from datetime import date
 
-    assert latest_quarters(date(2026, 10, 22), 3) == [(2026, 4), (2026, 3), (2026, 2)]
+    assert latest_quarters(date(2026, 10, 22), 3) == [(2026, 3), (2026, 2), (2026, 1)]
+    assert latest_quarters(date(2026, 1, 5), 2) == [(2025, 4), (2025, 3)]
+    from stock_ops.data.fundamentals import last_completed_quarter, quarter_end
+
+    assert quarter_end(*last_completed_quarter(date(2026, 10, 22))) == "2026-09-30"
 
 
 def test_fetch_parses_and_scales():
@@ -115,8 +119,16 @@ def test_cache_fundamentals_roundtrip_and_stale(tmp_path):
     df = BaostockFundamentals(_FakeProvider(), request_interval=0).fetch_many(["600519"])
     assert c.upsert_fundamentals(df) == 1
     assert c.fundamentals(["600519"]).iloc[0]["roe"] == 15.23
-    assert c.fundamentals_stale(["600519", "000001"], max_age_days=7) == ["000001"]
-    assert c.fundamentals_stale(["600519"], max_age_days=-1) == ["600519"]  # 立即过期
+    # 假数据财报期 2026-06-30，最近已结束季度为 2026-09-30：缺最新季报，但 7 天内检查过 -> 不重抓；000001 缺失 -> 重抓
+    from datetime import date as _d
+
+    today = _d(2026, 10, 22)
+    assert c.fundamentals_stale(["600519", "000001"], max_age_days=7, today=today) == ["000001"]
+    assert c.fundamentals_stale(["600519"], max_age_days=0, today=today) == ["600519"]  # 每天重查
+    # 已拿到最新季报的股票不再抓
+    df2 = df.assign(report_date="2026-09-30")
+    c.upsert_fundamentals(df2)
+    assert c.fundamentals_stale(["600519"], max_age_days=0, today=today) == []
 
 
 def test_screen_with_fundamentals(snapshot):

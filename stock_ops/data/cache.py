@@ -124,15 +124,26 @@ class Cache:
             )
         return pd.read_sql("SELECT * FROM fundamentals", self.conn)
 
-    def fundamentals_stale(self, codes: list[str], max_age_days: int) -> list[str]:
-        """返回缓存缺失或超过 max_age_days 未更新的代码。"""
+    def fundamentals_stale(self, codes: list[str], max_age_days: int, today=None) -> list[str]:
+        """需要重抓的代码：缓存缺失；或还没拿到最近一个已结束季度的财报、且距上次检查已超过 max_age_days。
+
+        已经拿到最新季报的股票在下个季度结束前不会再抓。
+        """
+        from .fundamentals import last_completed_quarter, quarter_end
+
         if not codes:
             return []
         df = self.fundamentals(codes)
-        fresh: set[str] = set()
-        if not df.empty:
-            cutoff = (pd.Timestamp.today().normalize() - pd.Timedelta(days=max_age_days)).strftime(
-                "%Y-%m-%d"
-            )
-            fresh = set(df[df["updated_at"].astype(str) >= cutoff]["code"])
+        if df.empty:
+            return list(codes)
+        qe = quarter_end(*last_completed_quarter(today))
+        now = pd.Timestamp(today) if today else pd.Timestamp.today().normalize()
+        cutoff = (now - pd.Timedelta(days=max_age_days)).strftime("%Y-%m-%d")
+        has_latest = df["report_date"].astype(str) >= qe
+        checked_recently = (
+            df["updated_at"].astype(str) > cutoff
+            if max_age_days > 0
+            else pd.Series(False, index=df.index)
+        )
+        fresh = set(df[has_latest | checked_recently]["code"])
         return [c for c in codes if c not in fresh]

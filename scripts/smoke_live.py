@@ -69,10 +69,16 @@ def main() -> int:
     from stock_ops.data.fundamentals import BaostockFundamentals
 
     try:
-        fr = BaostockFundamentals(bs).fetch("600519")
-        say(
-            f"[OK]   baostock.fundamentals(600519): 财报期 {fr['report_date']} ROE {fr['roe']} 净利同比 {fr['yoy_ni']} 负债率 {fr['liability_to_asset']}"
-        )
+        from stock_ops.config import Config
+        from stock_ops.portfolio import TradeBook
+
+        _cfg = Config.load()
+        bf = BaostockFundamentals(bs)
+        for c in sorted(set(_cfg.watchlist) | set(TradeBook(_cfg.trades_path).codes())):
+            fr = bf.fetch(c)
+            say(
+                f"[OK]   baostock.fundamentals({c}): 财报期 {fr['report_date']} 披露 {fr['pub_date']} ROE {fr['roe']} 净利同比 {fr['yoy_ni']}"
+            )
         results["baostock.fundamentals"] = True
     except Exception as e:
         say(f"[FAIL] baostock.fundamentals: {type(e).__name__}: {str(e)[:200]}")

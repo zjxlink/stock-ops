@@ -45,10 +45,20 @@ _BALANCE = {"liabilityToAsset": "liability_to_asset", "currentRatio": "current_r
 _CASH = {"CFOToNP": "cfo_to_np", "CFOToOR": "cfo_to_revenue"}
 
 
-def latest_quarters(today: date | None = None, n: int = 5) -> list[tuple[int, int]]:
-    """从当前日期往前列出最近 n 个财报期 (year, quarter)。季报披露有滞后，调用方逐期尝试直到有数据。"""
+def last_completed_quarter(today: date | None = None) -> tuple[int, int]:
+    """最近一个已经结束的季度。10 月 22 日 -> (year, 3)；1 月 -> (year-1, 4)。"""
     today = today or date.today()
-    y, q = today.year, (today.month - 1) // 3 + 1
+    q = (today.month - 1) // 3
+    return (today.year, q) if q else (today.year - 1, 4)
+
+
+def quarter_end(year: int, quarter: int) -> str:
+    return f"{year}-{('03-31', '06-30', '09-30', '12-31')[quarter - 1]}"
+
+
+def latest_quarters(today: date | None = None, n: int = 4) -> list[tuple[int, int]]:
+    """从最近一个已结束的季度往前列出 n 个财报期。季报披露有滞后，调用方逐期尝试直到有数据。"""
+    y, q = last_completed_quarter(today)
     out = []
     for _ in range(n):
         out.append((y, q))
